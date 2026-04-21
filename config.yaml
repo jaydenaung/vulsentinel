@@ -1,0 +1,36 @@
+products:
+  - kubernetes
+  - nginx
+  - containerd
+  - linux kernel
+  - openssl
+  - istio
+  - palo alto networks
+  - PAN-OS
+
+settings:
+  default_days: 7
+  nvd_api_base: "https://services.nvd.nist.gov/rest/json/cves/2.0"
+  # NVD allows 5 requests/30s without API key
+  nvd_rate_limit_delay: 6.5  # seconds between requests (conservative)
+  max_cves_per_product: 50
+  reports_dir: "reports"
+
+scoring:
+  environment_context: |
+    We operate a cloud-native and telco security environment with:
+    - Kubernetes clusters running Cloud-Native Network Functions (CNFs)
+    - 5G core network components (Nokia network functions)
+    - Service mesh via Istio
+    - Container runtime: containerd
+    - TLS/crypto heavily used via OpenSSL
+    - Nginx as ingress controller and reverse proxy
+    - Linux kernel (RHEL-based nodes)
+
+    Scoring priorities:
+    1. Network-exposed vulnerabilities in production CNFs/5G core = critical
+    2. Container escape or privilege escalation = critical
+    3. Kubernetes control-plane attacks = critical
+    4. Crypto/TLS weaknesses = high
+    5. DoS against telco network functions = high
+    6. Vulnerabilities requiring local access only = lower priority
