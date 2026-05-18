@@ -1,14 +1,35 @@
 # CVE Triage Agent
 
-An AI-powered CVE triage pipeline for cloud-native and telco/5G security environments. It fetches the latest CVEs from the NVD API, scores each one for your specific environment using Claude AI, and produces a prioritised Markdown patch advisory report.
+An AI security agent for cloud-native and telco/5G environments. It fetches the latest CVEs from the NVD API, autonomously enriches each one using real-world exploitation intelligence, and produces a prioritised Markdown patch advisory report.
+
+## How it works
+
+Unlike a simple scoring script, the agent runs a **multi-turn agentic loop**: Claude receives a CVE, decides which tools to call, executes them, and reasons over the combined evidence before issuing a recommendation. A CVE that looks like `MONITOR` based on CVSS alone will be escalated to `PATCH NOW` if it appears in the CISA KEV catalog or has a high exploitation probability.
+
+```
+NVD API ──► fetcher.py ──► scorer.py (agentic loop) ──► reporter.py ──► report
+                                │
+                    ┌───────────┴───────────┐
+                    ▼                       ▼
+             CISA KEV catalog          EPSS API
+          (known exploited CVEs)  (exploitation probability)
+```
+
+**Tool use rules Claude follows:**
+1. Always call `check_cisa_kev` for CVSS ≥ 7.0 — a KEV hit immediately escalates to `PATCH NOW`
+2. Call `check_epss` when CVSS ≥ 6.0 and KEV status alone is ambiguous
+3. Skip tools for low-CVSS CVEs where additional data would not change `LOW PRIORITY`
 
 ## Features
 
 - Fetches CVEs from [NVD API v2](https://services.nvd.nist.gov/rest/json/cves/2.0) — no API key required
-- Scores each CVE with Claude AI for environment-specific exposure (not just raw CVSS)
-- Factors in telco/CNF relevance and patch availability
-- Groups findings by recommended action: **PATCH NOW**, **MONITOR**, **LOW PRIORITY**
-- Respects NVD rate limits (5 req/30s without key)
+- **Agentic tool-use loop** — Claude autonomously calls tools to enrich analysis before scoring
+- **CISA KEV cross-reference** — confirmed exploitation in the wild overrides CVSS-based scoring
+- **EPSS scores** — exploitation probability from [FIRST.org](https://www.first.org/epss/) as a second signal
+- Environment-specific exposure scoring (not just raw CVSS)
+- Telco/CNF relevance assessment for 5G/cloud-native stacks
+- Findings grouped by action: **PATCH NOW**, **MONITOR**, **LOW PRIORITY**
+- Respects NVD rate limits (5 req/30s without API key)
 - `--dry-run` mode for testing the fetch pipeline without calling Claude
 
 ## Prerequisites
@@ -19,31 +40,25 @@ An AI-powered CVE triage pipeline for cloud-native and telco/5G security environ
 ## Setup
 
 ```bash
-# Clone / enter the project directory
 cd cve-triage-agent
 
-# Create a virtual environment
 python -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
 
-# Install dependencies
 pip install -r requirements.txt
 ```
 
 ## Usage
 
 ```bash
-# Scan last 7 days (default), full AI scoring
+# Scan last 7 days (default), full agentic scoring
 python agent.py
 
 # Scan last 14 days
 python agent.py --days 14
 
-# Dry run — fetch only, no Claude calls
+# Dry run — fetch only, no Claude or external tool calls
 python agent.py --dry-run
-
-# Dry run with custom window
-python agent.py --dry-run --days 3
 
 # Custom config file
 python agent.py --config /path/to/config.yaml
@@ -70,7 +85,7 @@ settings:
 
 scoring:
   environment_context: |
-    <Describe your environment here — this is what Claude uses to score exposure>
+    <Describe your environment here — Claude uses this to assess exposure>
 ```
 
 Customise `products` and `environment_context` to match your stack.
@@ -83,7 +98,7 @@ Each report (`reports/YYYY-MM-DD.md`) contains:
 2. **Summary table** — counts per action category
 3. **Findings** — grouped by PATCH NOW → MONITOR → LOW PRIORITY, sorted by CVSS descending
 
-Each finding shows:
+Each finding includes:
 
 | Field | Description |
 |-------|-------------|
@@ -94,17 +109,41 @@ Each finding shows:
 | Exposure Score | Claude's 1–10 score for your environment |
 | Telco/CNF Relevance | HIGH / MEDIUM / LOW |
 | Recommended Action | PATCH NOW / MONITOR / LOW PRIORITY |
-| Reason | One-line Claude rationale |
+| Reason | Claude's rationale — cites KEV/EPSS findings when they drove the decision |
 
 ## Architecture
 
 ```
 agent.py          Orchestrates the full pipeline
 fetcher.py        NVD API v2 client — keyword search + rate limiting
-scorer.py         Claude AI scoring — contextual risk analysis
+scorer.py         Agentic scoring loop — Claude + CISA KEV + EPSS tool use
 reporter.py       Markdown report builder
 config.yaml       Product watchlist + environment context
 ```
+
+### Agentic scoring loop (`scorer.py`)
+
+```
+user prompt (CVE details)
+        │
+        ▼
+   Claude (tool_use) ──► execute tool ──► tool_result
+        │                                      │
+        └──────────────────────────────────────┘
+                    (repeat until end_turn)
+        │
+        ▼
+   final JSON recommendation
+```
+
+Tools available to Claude:
+
+| Tool | Source | Signal |
+|------|--------|--------|
+| `check_cisa_kev` | [CISA KEV catalog](https://www.cisa.gov/known-exploited-vulnerabilities-catalog) | Confirmed real-world exploitation |
+| `check_epss` | [FIRST.org EPSS API](https://www.first.org/epss/) | Probability of exploitation within 30 days |
+
+The KEV catalog is fetched once and cached in-process for one hour to avoid redundant network calls across CVEs in the same run.
 
 ## Exit Codes
 
