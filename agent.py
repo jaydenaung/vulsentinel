@@ -118,6 +118,7 @@ def main() -> int:
             })
         findings = all_summaries
     else:
+        assert client is not None
         print("\nScoring CVEs with Claude AI...")
         for i, summary in enumerate(all_summaries, 1):
             cve_id = summary["cve_id"]
