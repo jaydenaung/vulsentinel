@@ -3,7 +3,7 @@
 # http://www.apache.org/licenses/LICENSE-2.0
 #
 # Author: Jayden Aung
-"""CVE Triage Agent by Jayden Aung — main entry point.
+"""VulSentinel by Jayden Aung — main entry point.
 
 Usage:
     python agent.py                  # scan last 7 days (live AI scoring)
@@ -31,7 +31,7 @@ def load_config(path: str = "config.yaml") -> dict:
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="AI-powered CVE triage agent for cloud-native / telco environments."
+        description="VulSentinel — AI-powered CVE triage for cloud-native / telco environments."
     )
     parser.add_argument(
         "--serve",
@@ -77,7 +77,7 @@ def main() -> int:
         import uvicorn
         from web.app import create_app
         logging.basicConfig(level=logging.INFO, format="%(levelname)s  %(message)s")
-        print(f"CVE Triage — starting web server on http://{args.host}:{args.port}")
+        print(f"VulSentinel — starting web server on http://{args.host}:{args.port}")
         uvicorn.run(create_app(), host=args.host, port=args.port)
         return 0
 
@@ -98,7 +98,7 @@ def main() -> int:
     reports_dir: str = settings.get("reports_dir", "reports")
     env_context: str = scoring_cfg.get("environment_context", "")
 
-    print(f"CVE Triage Agent — scanning last {days} day(s)")
+    print(f"VulSentinel — scanning last {days} day(s)")
     print(f"Products: {', '.join(products)}")
     if args.dry_run:
         print("Mode: DRY RUN (no AI scoring)")
