@@ -19,14 +19,14 @@ STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="CVE Triage", docs_url=None, redoc_url=None)
+    app = FastAPI(title="VulSentinel", docs_url=None, redoc_url=None)
 
     # Initialise DB on startup
     @app.on_event("startup")
     def startup() -> None:
         init_db()
         start_scheduler()
-        log.info("CVE Triage server started")
+        log.info("VulSentinel server started")
 
     @app.on_event("shutdown")
     def shutdown() -> None:
