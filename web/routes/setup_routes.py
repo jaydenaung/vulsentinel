@@ -18,9 +18,8 @@ templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), ".
 def setup_page(request: Request):
     if user_count() > 0:
         return RedirectResponse("/login", status_code=303)
-    config_assets = _load_config_assets()
     return templates.TemplateResponse(request, "setup.html", {
-        "config_assets": config_assets,
+        "config_products": _load_config_products(),
         "config_env_context": _load_config_env_context(),
     })
 
@@ -31,7 +30,7 @@ async def setup_submit(
     username: str = Form(...),
     email: str = Form(...),
     password: str = Form(...),
-    import_assets: bool = Form(False),
+    import_products: bool = Form(False),
 ):
     if user_count() > 0:
         return RedirectResponse("/login", status_code=303)
@@ -45,7 +44,7 @@ async def setup_submit(
     if errors:
         return templates.TemplateResponse(request, "setup.html", {
             "errors": errors,
-            "config_assets": _load_config_assets(),
+            "config_products": _load_config_products(),
             "config_env_context": _load_config_env_context(),
         }, status_code=400)
 
@@ -55,18 +54,16 @@ async def setup_submit(
             (username.strip(), email.strip(), hash_password(password)),
         )
 
-    # Optionally import assets from config.yaml
-    if import_assets:
-        assets = _load_config_assets()
-        if assets:
+    if import_products:
+        products = _load_config_products()
+        if products:
             with get_db() as conn:
-                for kw in assets:
+                for kw in products:
                     conn.execute(
-                        "INSERT OR IGNORE INTO assets (name, keyword, description) VALUES (?, ?, ?)",
-                        (kw.title(), kw, f"Imported from config.yaml"),
+                        "INSERT OR IGNORE INTO products (name, keyword, description) VALUES (?, ?, ?)",
+                        (kw.title(), kw, "Imported from config.yaml"),
                     )
 
-    # Import env_context from config.yaml if available
     env = _load_config_env_context()
     if env and not get_setting("env_context"):
         set_setting("env_context", env)
@@ -74,7 +71,7 @@ async def setup_submit(
     return RedirectResponse("/login?setup=1", status_code=303)
 
 
-def _load_config_assets() -> list[str]:
+def _load_config_products() -> list[str]:
     try:
         with open("config.yaml", encoding="utf-8") as fh:
             cfg = yaml.safe_load(fh)

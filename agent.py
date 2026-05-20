@@ -6,8 +6,8 @@
 """VulSentinel by Jayden Aung — main entry point.
 
 Usage:
-    python agent.py                  # scan last 7 days (live AI scoring)
-    python agent.py --days 14        # scan last 14 days
+    python agent.py                  # check last 7 days (live AI scoring)
+    python agent.py --days 14        # check last 14 days
     python agent.py --dry-run        # fetch CVEs only, skip Claude scoring
     python agent.py --serve          # start the web dashboard server
     python agent.py --serve --port 9000 --host 127.0.0.1
@@ -36,7 +36,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--serve",
         action="store_true",
-        help="Start the web dashboard server instead of running a one-off scan.",
+        help="Start the web dashboard server instead of running a one-off check.",
     )
     parser.add_argument(
         "--host",
@@ -98,7 +98,7 @@ def main() -> int:
     reports_dir: str = settings.get("reports_dir", "reports")
     env_context: str = scoring_cfg.get("environment_context", "")
 
-    print(f"VulSentinel — scanning last {days} day(s)")
+    print(f"VulSentinel — checking last {days} day(s)")
     print(f"Products: {', '.join(products)}")
     if args.dry_run:
         print("Mode: DRY RUN (no AI scoring)")

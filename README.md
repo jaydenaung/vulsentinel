@@ -26,9 +26,9 @@ NVD API ──► fetcher.py ──► scorer.py (agentic loop) ──► report
 
 ## Features
 
-- **Web dashboard** — multi-user visibility into CVEs by asset, severity, and triage status
-- **Asset inventory** — define the products/systems you track via UI or `config.yaml`
-- **Scheduled scans** — configurable background scanning (default: every 24h)
+- **Web dashboard** — multi-user visibility into CVEs by product, severity, and triage status
+- **Product watchlist** — define the products/systems you track via UI or `config.yaml`
+- **Scheduled checks** — configurable background checks (default: every 24h)
 - **CVE triage workflow** — mark CVEs as open / accepted / in remediation / mitigated
 - Fetches CVEs from [NVD API v2](https://services.nvd.nist.gov/rest/json/cves/2.0) — no API key required
 - **Agentic tool-use loop** — Claude autonomously calls tools to enrich analysis before scoring
@@ -64,15 +64,15 @@ python agent.py --serve --port 8001  # custom port
 python agent.py --serve --host 127.0.0.1 --port 8001
 ```
 
-On first visit, the setup wizard creates your admin account and optionally imports assets from `config.yaml`.
+On first visit, the setup wizard creates your admin account and optionally imports products from `config.yaml`.
 
-### CLI (one-off scan)
+### CLI (one-off check)
 
 ```bash
-# Scan last 7 days (default), full agentic scoring
+# Check last 7 days (default), full agentic scoring
 python agent.py
 
-# Scan last 14 days
+# Check last 14 days
 python agent.py --days 14
 
 # Dry run — fetch only, no Claude or external tool calls
@@ -106,7 +106,7 @@ scoring:
     <Describe your environment here — Claude uses this to assess exposure>
 ```
 
-Assets and environment context can also be managed via the web UI (Settings page).
+Products and environment context can also be managed via the web UI (Settings page).
 
 ## Architecture
 
@@ -120,8 +120,8 @@ web/
   app.py          FastAPI application factory
   db.py           SQLite schema + query helpers
   auth.py         Session auth (bcrypt + signed cookies)
-  scanner.py      Scan orchestrator — wraps fetcher + scorer, persists to DB
-  scheduler.py    APScheduler background periodic scans
+  scanner.py      Check orchestrator — wraps fetcher + scorer, persists to DB
+  scheduler.py    APScheduler background periodic checks
   routes/         Page and API route handlers
   templates/      Jinja2 HTML templates
   static/         CSS

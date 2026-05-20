@@ -30,9 +30,9 @@
         <div class="row g-2">
           <div class="col-sm-6">
             <table class="table table-sm small mb-0">
-              <tr><td class="text-muted w-50">Asset</td><td class="fw-semibold">{{ cve.asset_name }}</td></tr>
+              <tr><td class="text-muted w-50">Product</td><td class="fw-semibold">{{ cve.product_name }}</td></tr>
               <tr><td class="text-muted">Published</td><td>{{ cve.published or '—' }}</td></tr>
-              <tr><td class="text-muted">Scanned</td><td>{{ cve.scanned_at[:16] | replace('T',' ') }} UTC</td></tr>
+              <tr><td class="text-muted">Checked</td><td>{{ cve.checked_at[:16] | replace('T',' ') }} UTC</td></tr>
               <tr>
                 <td class="text-muted">CVSS Score</td>
                 <td>
