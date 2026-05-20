@@ -43,8 +43,8 @@ NVD API ──► fetcher.py ──► scorer.py (agentic loop) ──► report
 ## Setup
 
 ```bash
-git clone https://github.com/jaydenaung/cve-triage-ai-agent.git
-cd cve-triage-ai-agent
+git clone https://github.com/jaydenaung/vulsentinel.git
+cd vulsentinel
 
 python -m venv .venv
 source .venv/bin/activate  # Windows: .venv\Scripts\activate
