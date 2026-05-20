@@ -9,6 +9,8 @@ Usage:
     python agent.py                  # scan last 7 days (live AI scoring)
     python agent.py --days 14        # scan last 14 days
     python agent.py --dry-run        # fetch CVEs only, skip Claude scoring
+    python agent.py --serve          # start the web dashboard server
+    python agent.py --serve --port 9000 --host 127.0.0.1
 """
 
 import argparse
@@ -32,6 +34,22 @@ def parse_args() -> argparse.Namespace:
         description="AI-powered CVE triage agent for cloud-native / telco environments."
     )
     parser.add_argument(
+        "--serve",
+        action="store_true",
+        help="Start the web dashboard server instead of running a one-off scan.",
+    )
+    parser.add_argument(
+        "--host",
+        default="0.0.0.0",
+        help="Host to bind the web server to (default: 0.0.0.0).",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=8000,
+        help="Port to bind the web server to (default: 8000).",
+    )
+    parser.add_argument(
         "--days",
         type=int,
         default=None,
@@ -52,6 +70,16 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+
+    # ── Web server mode ──────────────────────────────────────────────────────
+    if args.serve:
+        import logging
+        import uvicorn
+        from web.app import create_app
+        logging.basicConfig(level=logging.INFO, format="%(levelname)s  %(message)s")
+        print(f"CVE Triage — starting web server on http://{args.host}:{args.port}")
+        uvicorn.run(create_app(), host=args.host, port=args.port)
+        return 0
 
     # ── Load config ──────────────────────────────────────────────────────────
     try:

@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}CVE Triage{% endblock %}</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="wrapper">
+
+  <!-- Sidebar -->
+  <nav class="sidebar d-flex flex-column">
+    <div class="sidebar-brand px-3 py-3 d-flex align-items-center gap-2">
+      <i class="bi bi-shield-fill-exclamation text-danger fs-4"></i>
+      <span class="fw-bold text-white fs-5">CVE Triage</span>
+    </div>
+    <hr class="text-secondary my-0">
+    <ul class="nav flex-column px-2 py-3 flex-grow-1">
+      <li class="nav-item">
+        <a class="nav-link sidebar-link {% if active_page == 'dashboard' %}active{% endif %}" href="/dashboard">
+          <i class="bi bi-speedometer2"></i> Dashboard
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link sidebar-link {% if active_page == 'cves' %}active{% endif %}" href="/cves">
+          <i class="bi bi-bug-fill"></i> CVEs
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link sidebar-link {% if active_page == 'assets' %}active{% endif %}" href="/assets">
+          <i class="bi bi-hdd-stack-fill"></i> Assets
+        </a>
+      </li>
+      {% if user.role == 'admin' %}
+      <li class="nav-item">
+        <a class="nav-link sidebar-link {% if active_page == 'users' %}active{% endif %}" href="/users">
+          <i class="bi bi-people-fill"></i> Users
+        </a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link sidebar-link {% if active_page == 'settings' %}active{% endif %}" href="/settings">
+          <i class="bi bi-gear-fill"></i> Settings
+        </a>
+      </li>
+      {% endif %}
+    </ul>
+    <div class="px-3 py-2 text-secondary small border-top border-secondary">
+      <i class="bi bi-person-circle"></i> {{ user.username }}
+      <span class="badge bg-secondary ms-1">{{ user.role }}</span>
+    </div>
+  </nav>
+
+  <!-- Main content -->
+  <div class="content-wrapper d-flex flex-column">
+
+    <!-- Top bar -->
+    <div class="topbar d-flex justify-content-between align-items-center px-4 py-2 border-bottom">
+      <div class="fw-semibold text-dark">{% block page_title %}{% endblock %}</div>
+      <div class="d-flex align-items-center gap-2">
+        {% if user.role == 'admin' %}
+        <form method="post" action="/scan/trigger" class="d-inline">
+          <button type="submit" class="btn btn-sm btn-outline-warning">
+            <i class="bi bi-play-fill"></i> Run Scan
+          </button>
+        </form>
+        {% endif %}
+        <a href="/logout" class="btn btn-sm btn-outline-secondary">
+          <i class="bi bi-box-arrow-right"></i> Logout
+        </a>
+      </div>
+    </div>
+
+    <!-- Flash messages via query params -->
+    {% set msg = request.query_params.get('msg') %}
+    {% set err = request.query_params.get('error') %}
+    {% if msg %}
+    <div class="mx-4 mt-3">
+      <div class="alert alert-success alert-dismissible fade show py-2" role="alert">
+        <i class="bi bi-check-circle-fill"></i> {{ msg }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      </div>
+    </div>
+    {% endif %}
+    {% if err %}
+    <div class="mx-4 mt-3">
+      <div class="alert alert-danger alert-dismissible fade show py-2" role="alert">
+        <i class="bi bi-exclamation-triangle-fill"></i> {{ err }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+      </div>
+    </div>
+    {% endif %}
+
+    <main class="p-4 flex-grow-1">
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

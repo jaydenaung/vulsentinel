@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}Settings — CVE Triage{% endblock %}
+{% block page_title %}<i class="bi bi-gear-fill"></i> Settings{% endblock %}
+
+{% block content %}
+<div class="row g-3">
+  <div class="col-md-7">
+    <div class="card">
+      <div class="card-header fw-semibold">Scan Configuration</div>
+      <div class="card-body">
+        <form method="post" action="/settings">
+          <div class="row g-3 mb-3">
+            <div class="col-sm-6">
+              <label class="form-label small fw-semibold">Scan Interval (hours)</label>
+              <input type="number" name="scan_interval_hours" class="form-control form-control-sm"
+                     value="{{ cfg.scan_interval_hours }}" min="1" max="720" required>
+              <div class="form-text">How often to run automatic scans.</div>
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label small fw-semibold">Look-back Window (days)</label>
+              <input type="number" name="scan_days_lookback" class="form-control form-control-sm"
+                     value="{{ cfg.scan_days_lookback }}" min="1" max="90" required>
+              <div class="form-text">How far back to search for new CVEs.</div>
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label small fw-semibold">Max CVEs per Asset</label>
+              <input type="number" name="max_cves_per_asset" class="form-control form-control-sm"
+                     value="{{ cfg.max_cves_per_asset }}" min="1" max="200" required>
+            </div>
+            <div class="col-sm-6">
+              <label class="form-label small fw-semibold">NVD Rate Limit Delay (seconds)</label>
+              <input type="number" name="nvd_rate_limit_delay" class="form-control form-control-sm"
+                     value="{{ cfg.nvd_rate_limit_delay }}" min="0" max="60" step="0.5" required>
+              <div class="form-text">6.5s recommended without NVD API key.</div>
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label small fw-semibold">Environment Context <span class="text-muted">(sent to Claude AI)</span></label>
+            <textarea name="env_context" class="form-control form-control-sm" rows="8"
+                      placeholder="Describe your infrastructure, technology stack, and scoring priorities…">{{ cfg.env_context }}</textarea>
+            <div class="form-text">This context shapes how Claude scores CVE relevance for your environment.</div>
+          </div>
+
+          <button type="submit" class="btn btn-primary btn-sm">
+            <i class="bi bi-save-fill"></i> Save Settings
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-md-5">
+    <div class="card">
+      <div class="card-header fw-semibold"><i class="bi bi-info-circle-fill text-info"></i> API Keys</div>
+      <div class="card-body small">
+        <p class="text-muted mb-2">
+          The Anthropic API key is read from the <code>ANTHROPIC_API_KEY</code>
+          environment variable. Set it before starting the server:
+        </p>
+        <pre class="bg-light p-2 rounded small">export ANTHROPIC_API_KEY=sk-ant-...</pre>
+        <p class="text-muted mb-0">
+          The NVD API is used without authentication by default (rate-limited to
+          5 requests/30s). No key required for most use cases.
+        </p>
+      </div>
+    </div>
+
+    <div class="card mt-3">
+      <div class="card-header fw-semibold"><i class="bi bi-shield-lock-fill text-warning"></i> Security Notes</div>
+      <div class="card-body small text-muted">
+        <ul class="mb-0 ps-3">
+          <li>This app is designed for internal network use only.</li>
+          <li>Set <code>CVE_SECRET_KEY</code> env var to a strong random string in production.</li>
+          <li>Sessions expire after 7 days of inactivity.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

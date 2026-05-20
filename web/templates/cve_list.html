@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block title %}CVEs — CVE Triage{% endblock %}
+{% block page_title %}<i class="bi bi-bug-fill"></i> CVE List{% endblock %}
+
+{% block content %}
+
+<!-- Filters -->
+<div class="card mb-3">
+  <div class="card-body py-2">
+    <form method="get" action="/cves" class="row g-2 align-items-end">
+      <div class="col-md-3">
+        <label class="form-label small fw-semibold mb-1">Asset</label>
+        <select name="asset_id" class="form-select form-select-sm">
+          <option value="">All assets</option>
+          {% for a in assets %}
+          <option value="{{ a.id }}" {{ 'selected' if filters.asset_id == a.id|string else '' }}>{{ a.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label small fw-semibold mb-1">Action</label>
+        <select name="action" class="form-select form-select-sm">
+          <option value="">All actions</option>
+          <option value="PATCH NOW" {{ 'selected' if filters.action == 'PATCH NOW' }}>PATCH NOW</option>
+          <option value="MONITOR" {{ 'selected' if filters.action == 'MONITOR' }}>MONITOR</option>
+          <option value="LOW PRIORITY" {{ 'selected' if filters.action == 'LOW PRIORITY' }}>LOW PRIORITY</option>
+        </select>
+      </div>
+      <div class="col-md-2">
+        <label class="form-label small fw-semibold mb-1">Status</label>
+        <select name="status" class="form-select form-select-sm">
+          <option value="">All statuses</option>
+          <option value="open" {{ 'selected' if filters.status == 'open' }}>Open</option>
+          <option value="accepted" {{ 'selected' if filters.status == 'accepted' }}>Accepted</option>
+          <option value="in_remediation" {{ 'selected' if filters.status == 'in_remediation' }}>In Remediation</option>
+          <option value="mitigated" {{ 'selected' if filters.status == 'mitigated' }}>Mitigated</option>
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label small fw-semibold mb-1">Search</label>
+        <input type="text" name="search" class="form-control form-control-sm" placeholder="CVE ID or keyword…" value="{{ filters.search }}">
+      </div>
+      <div class="col-md-2 d-flex gap-2">
+        <button type="submit" class="btn btn-sm btn-primary flex-grow-1">Filter</button>
+        <a href="/cves" class="btn btn-sm btn-outline-secondary">Clear</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Results -->
+<div class="card">
+  <div class="card-header d-flex justify-content-between align-items-center fw-semibold small">
+    <span>{{ total }} CVE(s) found</span>
+    {% if total_pages > 1 %}
+    <span class="text-muted">Page {{ page }}/{{ total_pages }}</span>
+    {% endif %}
+  </div>
+  <div class="card-body p-0">
+    {% if cves %}
+    <table class="table table-hover mb-0 small align-middle">
+      <thead class="table-light">
+        <tr>
+          <th>CVE ID</th>
+          <th>Asset</th>
+          <th>CVSS</th>
+          <th>Exposure</th>
+          <th>Action</th>
+          <th>Status</th>
+          <th>Published</th>
+          <th>Scanned</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in cves %}
+        <tr class="{{ 'table-danger' if c.recommended_action == 'PATCH NOW' else ('table-warning' if c.recommended_action == 'MONITOR' else '') }} bg-opacity-25">
+          <td class="fw-semibold">
+            <a href="/cves/{{ c.id }}" class="text-decoration-none">{{ c.cve_id }}</a>
+          </td>
+          <td>{{ c.asset_name }}</td>
+          <td>
+            {% if c.cvss_score %}
+            <span class="badge {% if c.cvss_score >= 9 %}bg-danger{% elif c.cvss_score >= 7 %}bg-warning text-dark{% elif c.cvss_score >= 4 %}bg-info text-dark{% else %}bg-success{% endif %}">
+              {{ "%.1f" | format(c.cvss_score) }}
+            </span>
+            {% else %}<span class="text-muted">N/A</span>{% endif %}
+          </td>
+          <td class="text-muted">{{ c.exposure_score or '—' }}/10</td>
+          <td>
+            {% if c.recommended_action == 'PATCH NOW' %}
+            <span class="badge bg-danger">PATCH NOW</span>
+            {% elif c.recommended_action == 'MONITOR' %}
+            <span class="badge bg-warning text-dark">MONITOR</span>
+            {% else %}
+            <span class="badge bg-success">LOW</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if c.status == 'open' %}
+            <span class="badge bg-secondary">open</span>
+            {% elif c.status == 'accepted' %}
+            <span class="badge bg-info text-dark">accepted</span>
+            {% elif c.status == 'in_remediation' %}
+            <span class="badge bg-primary">in remediation</span>
+            {% elif c.status == 'mitigated' %}
+            <span class="badge bg-success">mitigated</span>
+            {% endif %}
+          </td>
+          <td class="text-muted">{{ c.published or '—' }}</td>
+          <td class="text-muted">{{ c.scanned_at[:10] }}</td>
+          <td><a href="/cves/{{ c.id }}" class="btn btn-sm btn-outline-secondary py-0">Detail</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="text-center text-muted py-5">
+      <i class="bi bi-inbox fs-2"></i>
+      <p class="mt-2 mb-0 small">No CVEs match your filters.</p>
+    </div>
+    {% endif %}
+  </div>
+
+  {% if total_pages > 1 %}
+  <div class="card-footer d-flex justify-content-center gap-1">
+    {% for p in range(1, total_pages + 1) %}
+    <a href="/cves?page={{ p }}&asset_id={{ filters.asset_id }}&action={{ filters.action }}&status={{ filters.status }}&search={{ filters.search }}"
+       class="btn btn-sm {{ 'btn-primary' if p == page else 'btn-outline-secondary' }}">{{ p }}</a>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

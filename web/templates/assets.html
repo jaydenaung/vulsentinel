@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+{% block title %}Assets — CVE Triage{% endblock %}
+{% block page_title %}<i class="bi bi-hdd-stack-fill"></i> Asset Inventory{% endblock %}
+
+{% block content %}
+
+<div class="row g-3">
+  <!-- Asset table -->
+  <div class="col-md-8">
+    <div class="card">
+      <div class="card-header fw-semibold">Tracked Assets</div>
+      <div class="card-body p-0">
+        {% if assets %}
+        <table class="table table-hover mb-0 small align-middle">
+          <thead class="table-light">
+            <tr>
+              <th>Name</th>
+              <th>Keyword</th>
+              <th>Description</th>
+              <th class="text-center">CVEs</th>
+              <th class="text-center text-danger">Critical</th>
+              <th class="text-center">Active</th>
+              {% if user.role == 'admin' %}
+              <th>Actions</th>
+              {% endif %}
+            </tr>
+          </thead>
+          <tbody>
+            {% for a in assets %}
+            <tr class="{{ 'table-secondary' if not a.active else '' }}">
+              <td class="fw-semibold">
+                <a href="/cves?asset_id={{ a.id }}" class="text-decoration-none">{{ a.name }}</a>
+              </td>
+              <td><code>{{ a.keyword }}</code></td>
+              <td class="text-muted">{{ a.description or '—' }}</td>
+              <td class="text-center">{{ a.cve_count }}</td>
+              <td class="text-center">
+                {% if a.critical_count > 0 %}
+                <span class="badge bg-danger">{{ a.critical_count }}</span>
+                {% else %}<span class="text-muted">—</span>{% endif %}
+              </td>
+              <td class="text-center">
+                {% if a.active %}
+                <span class="badge bg-success">Active</span>
+                {% else %}
+                <span class="badge bg-secondary">Inactive</span>
+                {% endif %}
+              </td>
+              {% if user.role == 'admin' %}
+              <td>
+                <form method="post" action="/assets/{{ a.id }}/toggle" class="d-inline">
+                  <button class="btn btn-xs btn-sm btn-outline-secondary py-0" title="Toggle active">
+                    <i class="bi {{ 'bi-pause-fill' if a.active else 'bi-play-fill' }}"></i>
+                  </button>
+                </form>
+                <form method="post" action="/assets/{{ a.id }}/delete" class="d-inline"
+                      onsubmit="return confirm('Delete {{ a.name }}? This removes all associated CVEs.')">
+                  <button class="btn btn-xs btn-sm btn-outline-danger py-0" title="Delete">
+                    <i class="bi bi-trash-fill"></i>
+                  </button>
+                </form>
+              </td>
+              {% endif %}
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <div class="text-center text-muted py-5">
+          <i class="bi bi-inbox fs-2"></i>
+          <p class="mt-2 mb-0 small">No assets yet. Add one to start tracking CVEs.</p>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Add asset form -->
+  {% if user.role == 'admin' %}
+  <div class="col-md-4">
+    <div class="card">
+      <div class="card-header fw-semibold"><i class="bi bi-plus-circle-fill text-success"></i> Add Asset</div>
+      <div class="card-body">
+        <form method="post" action="/assets/add">
+          <div class="mb-3">
+            <label class="form-label small fw-semibold">Display Name</label>
+            <input type="text" name="name" class="form-control form-control-sm" placeholder="e.g. Kubernetes" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label small fw-semibold">NVD Search Keyword</label>
+            <input type="text" name="keyword" class="form-control form-control-sm" placeholder="e.g. kubernetes" required>
+            <div class="form-text">Used to search the NVD database. Keep it specific.</div>
+          </div>
+          <div class="mb-3">
+            <label class="form-label small fw-semibold">Description <span class="text-muted">(optional)</span></label>
+            <input type="text" name="description" class="form-control form-control-sm" placeholder="e.g. Container orchestration">
+          </div>
+          <button type="submit" class="btn btn-success btn-sm w-100">
+            <i class="bi bi-plus-circle-fill"></i> Add Asset
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <div class="card mt-3">
+      <div class="card-body small text-muted">
+        <i class="bi bi-info-circle-fill text-info"></i>
+        <strong>Tip:</strong> The keyword is searched against NVD's CPE descriptions.
+        Use the vendor/product name exactly as it appears in CVE descriptions (e.g. <code>palo alto networks</code>, <code>openssl</code>).
+      </div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

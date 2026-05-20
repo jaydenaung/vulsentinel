@@ -1,0 +1,237 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — CVE Triage{% endblock %}
+{% block page_title %}<i class="bi bi-speedometer2"></i> Dashboard{% endblock %}
+
+{% block content %}
+
+<!-- Scan in progress banner -->
+{% if scan_running %}
+<div class="alert alert-warning d-flex align-items-center gap-2 py-2 mb-3" id="scanBanner">
+  <div class="spinner-border spinner-border-sm text-warning" role="status"></div>
+  <span>Scan in progress… <span id="scanProgress"></span></span>
+</div>
+{% endif %}
+
+<!-- Stat cards -->
+<div class="row g-3 mb-4">
+  <div class="col-6 col-md-3">
+    <div class="card stat-card h-100">
+      <div class="card-body">
+        <div class="stat-label">Total CVEs</div>
+        <div class="stat-value text-dark">{{ total_cves }}</div>
+        <div class="stat-sub text-muted">{{ total_assets }} asset(s) tracked</div>
+      </div>
+    </div>
+  </div>
+  <div class="col-6 col-md-3">
+    <a href="/cves?action=PATCH+NOW" class="text-decoration-none">
+      <div class="card stat-card stat-card-critical h-100">
+        <div class="card-body">
+          <div class="stat-label">PATCH NOW</div>
+          <div class="stat-value text-danger">{{ patch_now }}</div>
+          <div class="stat-sub text-muted">Requires immediate action</div>
+        </div>
+      </div>
+    </a>
+  </div>
+  <div class="col-6 col-md-3">
+    <a href="/cves?action=MONITOR" class="text-decoration-none">
+      <div class="card stat-card stat-card-monitor h-100">
+        <div class="card-body">
+          <div class="stat-label">MONITOR</div>
+          <div class="stat-value text-warning">{{ monitor }}</div>
+          <div class="stat-sub text-muted">Watch for updates</div>
+        </div>
+      </div>
+    </a>
+  </div>
+  <div class="col-6 col-md-3">
+    <a href="/cves?action=LOW+PRIORITY" class="text-decoration-none">
+      <div class="card stat-card stat-card-low h-100">
+        <div class="card-body">
+          <div class="stat-label">LOW PRIORITY</div>
+          <div class="stat-value text-success">{{ low_pri }}</div>
+          <div class="stat-sub text-muted">Low risk</div>
+        </div>
+      </div>
+    </a>
+  </div>
+</div>
+
+<div class="row g-3 mb-4">
+  <!-- CVEs by asset -->
+  <div class="col-md-7">
+    <div class="card h-100">
+      <div class="card-header fw-semibold">
+        <i class="bi bi-hdd-stack-fill text-secondary"></i> CVEs by Asset
+      </div>
+      <div class="card-body p-0">
+        {% if asset_counts %}
+        <table class="table table-hover mb-0 small">
+          <thead class="table-light">
+            <tr>
+              <th>Asset</th>
+              <th class="text-center text-danger">PATCH NOW</th>
+              <th class="text-center">Total</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for a in asset_counts %}
+            <tr>
+              <td><a href="/cves?asset_id={{ a.id }}" class="text-decoration-none fw-semibold">{{ a.name }}</a></td>
+              <td class="text-center">
+                {% if a.critical > 0 %}
+                <span class="badge bg-danger">{{ a.critical }}</span>
+                {% else %}
+                <span class="text-muted">—</span>
+                {% endif %}
+              </td>
+              <td class="text-center text-muted">{{ a.total }}</td>
+              <td>
+                <div class="progress" style="height:6px;min-width:60px">
+                  {% if total_cves > 0 %}
+                  <div class="progress-bar bg-secondary" style="width:{{ (a.total / total_cves * 100)|int }}%"></div>
+                  {% endif %}
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <div class="text-center text-muted py-5">
+          <i class="bi bi-inbox fs-2"></i>
+          <p class="mt-2 mb-0 small">No CVE data yet. <a href="/scan/trigger" class="text-decoration-none">Run a scan</a> to populate.</p>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Last scan info -->
+  <div class="col-md-5">
+    <div class="card h-100">
+      <div class="card-header fw-semibold">
+        <i class="bi bi-clock-history text-secondary"></i> Last Scan
+      </div>
+      <div class="card-body">
+        {% if last_scan %}
+        <dl class="row small mb-0">
+          <dt class="col-5 text-muted">Status</dt>
+          <dd class="col-7">
+            {% if last_scan.status == 'completed' %}
+            <span class="badge bg-success">Completed</span>
+            {% elif last_scan.status == 'running' %}
+            <span class="badge bg-warning text-dark">Running</span>
+            {% else %}
+            <span class="badge bg-danger">{{ last_scan.status }}</span>
+            {% endif %}
+          </dd>
+          <dt class="col-5 text-muted">Started</dt>
+          <dd class="col-7">{{ last_scan.started_at[:16] | replace('T',' ') }} UTC</dd>
+          {% if last_scan.finished_at %}
+          <dt class="col-5 text-muted">Finished</dt>
+          <dd class="col-7">{{ last_scan.finished_at[:16] | replace('T',' ') }} UTC</dd>
+          {% endif %}
+          <dt class="col-5 text-muted">CVEs found</dt>
+          <dd class="col-7">{{ last_scan.cves_found }}</dd>
+          <dt class="col-5 text-muted">Triggered by</dt>
+          <dd class="col-7">{{ last_scan.triggered_by or '—' }}</dd>
+          {% if last_scan.error %}
+          <dt class="col-5 text-muted">Error</dt>
+          <dd class="col-7 text-danger small">{{ last_scan.error[:120] }}</dd>
+          {% endif %}
+        </dl>
+        {% else %}
+        <div class="text-center text-muted py-4">
+          <i class="bi bi-question-circle fs-2"></i>
+          <p class="mt-2 mb-0 small">No scans run yet.</p>
+          {% if user.role == 'admin' %}
+          <form method="post" action="/scan/trigger" class="mt-3">
+            <button class="btn btn-sm btn-warning">
+              <i class="bi bi-play-fill"></i> Run First Scan
+            </button>
+          </form>
+          {% endif %}
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Recent critical findings -->
+{% if recent_critical %}
+<div class="card">
+  <div class="card-header fw-semibold d-flex justify-content-between align-items-center">
+    <span><i class="bi bi-exclamation-octagon-fill text-danger"></i> Recent PATCH NOW Findings</span>
+    <a href="/cves?action=PATCH+NOW" class="btn btn-sm btn-outline-danger">View all</a>
+  </div>
+  <div class="card-body p-0">
+    <table class="table table-hover mb-0 small">
+      <thead class="table-light">
+        <tr>
+          <th>CVE ID</th>
+          <th>Asset</th>
+          <th>CVSS</th>
+          <th>Exposure</th>
+          <th>Status</th>
+          <th>Scanned</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in recent_critical %}
+        <tr class="table-danger-subtle">
+          <td><a href="/cves/{{ c.id }}" class="fw-semibold text-decoration-none">{{ c.cve_id }}</a></td>
+          <td>{{ c.asset_name }}</td>
+          <td>
+            {% if c.cvss_score %}
+            <span class="badge {% if c.cvss_score >= 9 %}bg-danger{% elif c.cvss_score >= 7 %}bg-warning text-dark{% else %}bg-secondary{% endif %}">
+              {{ "%.1f" | format(c.cvss_score) }}
+            </span>
+            {% else %}—{% endif %}
+          </td>
+          <td>{{ c.exposure_score or '—' }}/10</td>
+          <td>
+            {% if c.status == 'open' %}<span class="badge bg-secondary">open</span>
+            {% elif c.status == 'accepted' %}<span class="badge bg-info text-dark">accepted</span>
+            {% elif c.status == 'in_remediation' %}<span class="badge bg-primary">in remediation</span>
+            {% elif c.status == 'mitigated' %}<span class="badge bg-success">mitigated</span>
+            {% else %}<span class="badge bg-secondary">{{ c.status }}</span>{% endif %}
+          </td>
+          <td class="text-muted">{{ c.scanned_at[:10] }}</td>
+          <td><a href="/cves/{{ c.id }}" class="btn btn-xs btn-outline-secondary btn-sm py-0">Detail</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+{% if scan_running %}
+<script>
+function pollScan() {
+  fetch('/api/scan/status')
+    .then(r => r.json())
+    .then(data => {
+      if (data.is_running) {
+        const el = document.getElementById('scanProgress');
+        if (el && data.total > 0) {
+          el.textContent = `(${data.progress}/${data.total}: ${data.current_asset || ''})`;
+        }
+        setTimeout(pollScan, 3000);
+      } else {
+        location.reload();
+      }
+    });
+}
+setTimeout(pollScan, 3000);
+</script>
+{% endif %}
+{% endblock %}

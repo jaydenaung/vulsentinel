@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block title %}{{ cve.cve_id }} — CVE Triage{% endblock %}
+{% block page_title %}
+  <i class="bi bi-bug-fill"></i>
+  <a href="/cves" class="text-decoration-none text-muted">CVEs</a>
+  <span class="text-muted mx-1">/</span>
+  {{ cve.cve_id }}
+{% endblock %}
+
+{% block content %}
+<div class="row g-3">
+  <!-- Left: CVE details -->
+  <div class="col-md-8">
+    <div class="card mb-3">
+      <div class="card-header d-flex justify-content-between align-items-center fw-semibold">
+        <span>{{ cve.cve_id }}</span>
+        <div class="d-flex gap-2">
+          {% if cve.recommended_action == 'PATCH NOW' %}
+          <span class="badge bg-danger fs-6">PATCH NOW</span>
+          {% elif cve.recommended_action == 'MONITOR' %}
+          <span class="badge bg-warning text-dark fs-6">MONITOR</span>
+          {% else %}
+          <span class="badge bg-success fs-6">LOW PRIORITY</span>
+          {% endif %}
+        </div>
+      </div>
+      <div class="card-body">
+        <p class="text-muted small mb-3">{{ cve.description or 'No description available.' }}</p>
+
+        <div class="row g-2">
+          <div class="col-sm-6">
+            <table class="table table-sm small mb-0">
+              <tr><td class="text-muted w-50">Asset</td><td class="fw-semibold">{{ cve.asset_name }}</td></tr>
+              <tr><td class="text-muted">Published</td><td>{{ cve.published or '—' }}</td></tr>
+              <tr><td class="text-muted">Scanned</td><td>{{ cve.scanned_at[:16] | replace('T',' ') }} UTC</td></tr>
+              <tr>
+                <td class="text-muted">CVSS Score</td>
+                <td>
+                  {% if cve.cvss_score %}
+                  <span class="badge {% if cve.cvss_score >= 9 %}bg-danger{% elif cve.cvss_score >= 7 %}bg-warning text-dark{% elif cve.cvss_score >= 4 %}bg-info text-dark{% else %}bg-success{% endif %}">
+                    {{ "%.1f" | format(cve.cvss_score) }}
+                  </span>
+                  {% else %}N/A{% endif %}
+                </td>
+              </tr>
+            </table>
+          </div>
+          <div class="col-sm-6">
+            <table class="table table-sm small mb-0">
+              <tr><td class="text-muted w-50">Exposure Score</td><td>{{ cve.exposure_score or '—' }}/10</td></tr>
+              <tr><td class="text-muted">Relevance</td><td>{{ cve.telco_cnf_relevance or '—' }}</td></tr>
+              <tr>
+                <td class="text-muted">EPSS Score</td>
+                <td>{{ "%.3f" | format(cve.epss_score) if cve.epss_score else '—' }}</td>
+              </tr>
+              <tr>
+                <td class="text-muted">CISA KEV</td>
+                <td>
+                  {% if cve.in_kev %}
+                  <span class="badge bg-danger"><i class="bi bi-exclamation-octagon-fill"></i> YES</span>
+                  {% else %}
+                  <span class="text-muted">No</span>
+                  {% endif %}
+                </td>
+              </tr>
+            </table>
+          </div>
+        </div>
+
+        {% if cve.reason %}
+        <div class="mt-3 p-3 bg-light rounded small">
+          <strong><i class="bi bi-robot text-primary"></i> AI Analysis:</strong>
+          {{ cve.reason }}
+        </div>
+        {% endif %}
+
+        {% if cve.nvd_url %}
+        <div class="mt-3">
+          <a href="{{ cve.nvd_url }}" target="_blank" rel="noopener" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-box-arrow-up-right"></i> View on NVD
+          </a>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Right: Status + Notes -->
+  <div class="col-md-4">
+    <div class="card">
+      <div class="card-header fw-semibold">
+        <i class="bi bi-pencil-fill text-secondary"></i> Triage Status
+      </div>
+      <div class="card-body">
+        {% if user.role == 'admin' %}
+        <form method="post" action="/cves/{{ cve.id }}/update">
+          <div class="mb-3">
+            <label class="form-label small fw-semibold">Status</label>
+            <select name="status" class="form-select form-select-sm">
+              <option value="open" {{ 'selected' if cve.status == 'open' }}>Open</option>
+              <option value="accepted" {{ 'selected' if cve.status == 'accepted' }}>Accepted Risk</option>
+              <option value="in_remediation" {{ 'selected' if cve.status == 'in_remediation' }}>In Remediation</option>
+              <option value="mitigated" {{ 'selected' if cve.status == 'mitigated' }}>Mitigated</option>
+            </select>
+          </div>
+          <div class="mb-3">
+            <label class="form-label small fw-semibold">Notes</label>
+            <textarea name="notes" class="form-control form-control-sm" rows="5" placeholder="Add context, ticket refs, etc.">{{ cve.notes or '' }}</textarea>
+          </div>
+          <button type="submit" class="btn btn-primary btn-sm w-100">
+            <i class="bi bi-save-fill"></i> Save
+          </button>
+        </form>
+        {% else %}
+        <dl class="small">
+          <dt class="text-muted">Current status</dt>
+          <dd>
+            {% if cve.status == 'open' %}<span class="badge bg-secondary">open</span>
+            {% elif cve.status == 'accepted' %}<span class="badge bg-info text-dark">accepted risk</span>
+            {% elif cve.status == 'in_remediation' %}<span class="badge bg-primary">in remediation</span>
+            {% elif cve.status == 'mitigated' %}<span class="badge bg-success">mitigated</span>
+            {% endif %}
+          </dd>
+          {% if cve.notes %}
+          <dt class="text-muted mt-2">Notes</dt>
+          <dd class="text-muted">{{ cve.notes }}</dd>
+          {% endif %}
+        </dl>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
