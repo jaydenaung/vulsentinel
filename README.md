@@ -4,6 +4,8 @@ AI-powered CVE triage agent for cloud-native and telco/5G environments. VulSenti
 
 > Part of the Sentinel agent family alongside **KubeSentinel** (K8s misconfiguration + container image CVEs).
 
+![VulSentinel Dashboard](img/vulsentinel1.png)
+
 ## How it works
 
 VulSentinel runs a **multi-turn agentic loop**: Claude receives a CVE, decides which tools to call, executes them, and reasons over the combined evidence before issuing a recommendation. A CVE that looks like `MONITOR` based on CVSS alone will be escalated to `PATCH NOW` if it appears in the CISA KEV catalog or has a high exploitation probability.
