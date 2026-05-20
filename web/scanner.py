@@ -1,6 +1,6 @@
 # Copyright 2026 Jayden Aung
 # Licensed under the Apache License, Version 2.0
-"""Scan orchestrator — wraps fetcher + scorer and persists results to DB."""
+"""Check orchestrator — wraps fetcher + scorer and persists results to DB."""
 
 import threading
 from datetime import datetime
@@ -12,60 +12,60 @@ from web.db import get_db, get_setting
 
 _lock = threading.Lock()
 
-# In-memory scan progress (read by /api/scan/status)
-scan_state: dict[str, Any] = {
+# In-memory check progress (read by /api/check/status)
+check_state: dict[str, Any] = {
     "is_running": False,
     "triggered_by": None,
-    "current_asset": None,
+    "current_product": None,
     "progress": 0,
     "total": 0,
-    "scan_run_id": None,
+    "check_run_id": None,
     "started_at": None,
     "last_error": None,
 }
 
 
-def is_scan_running() -> bool:
-    return scan_state["is_running"]
+def is_check_running() -> bool:
+    return check_state["is_running"]
 
 
-def run_scan(triggered_by: str = "manual", dry_run: bool = False) -> Optional[int]:
-    """Start a scan in the current thread (call from background thread).
+def run_check(triggered_by: str = "manual", dry_run: bool = False) -> Optional[int]:
+    """Start a CVE check in the current thread (call from background thread).
 
-    Returns the scan_run_id on success, None if already running.
+    Returns the check_run_id on success, None if already running.
     """
     if not _lock.acquire(blocking=False):
         return None
 
-    scan_run_id: Optional[int] = None
+    check_run_id: Optional[int] = None
     try:
         _update_state(is_running=True, triggered_by=triggered_by, progress=0, total=0,
-                      current_asset=None, last_error=None, started_at=datetime.utcnow().isoformat())
+                      current_product=None, last_error=None, started_at=datetime.utcnow().isoformat())
 
-        days = int(get_setting("scan_days_lookback", "7"))
-        max_per_asset = int(get_setting("max_cves_per_asset", "50"))
+        days = int(get_setting("check_days_lookback", "7"))
+        max_per_product = int(get_setting("max_cves_per_product", "50"))
         rate_delay = float(get_setting("nvd_rate_limit_delay", "6.5"))
         env_context = get_setting("env_context", "")
 
-        # Create scan_run record
+        # Create check_run record
         with get_db() as conn:
             cur = conn.execute(
-                "INSERT INTO scan_runs (triggered_by, status) VALUES (?, 'running')",
+                "INSERT INTO check_runs (triggered_by, status) VALUES (?, 'running')",
                 (triggered_by,),
             )
-            scan_run_id = cur.lastrowid
+            check_run_id = cur.lastrowid
 
-        _update_state(scan_run_id=scan_run_id)
+        _update_state(check_run_id=check_run_id)
 
-        # Load active assets
+        # Load active products
         with get_db() as conn:
-            assets = [dict(r) for r in conn.execute(
-                "SELECT * FROM assets WHERE active = 1 ORDER BY name"
+            products = [dict(r) for r in conn.execute(
+                "SELECT * FROM products WHERE active = 1 ORDER BY name"
             ).fetchall()]
 
-        if not assets:
-            _finish_scan(scan_run_id, cves_found=0, status="completed")
-            return scan_run_id
+        if not products:
+            _finish_check(check_run_id, cves_found=0, status="completed")
+            return check_run_id
 
         # Build Claude client (unless dry run)
         client = None
@@ -73,28 +73,27 @@ def run_scan(triggered_by: str = "manual", dry_run: bool = False) -> Optional[in
             try:
                 client = build_client()
             except EnvironmentError as exc:
-                _finish_scan(scan_run_id, cves_found=0, status="failed", error=str(exc))
-                return scan_run_id
+                _finish_check(check_run_id, cves_found=0, status="failed", error=str(exc))
+                return check_run_id
 
-        _update_state(total=len(assets))
+        _update_state(total=len(products))
         total_cves = 0
 
-        for i, asset in enumerate(assets, 1):
-            _update_state(current_asset=asset["name"], progress=i)
+        for i, product in enumerate(products, 1):
+            _update_state(current_product=product["name"], progress=i)
 
             try:
                 raw_cves = fetch_cves(
-                    asset["keyword"],
+                    product["keyword"],
                     days=days,
                     rate_limit_delay=rate_delay,
-                    max_results=max_per_asset,
+                    max_results=max_per_product,
                 )
             except Exception as exc:
-                # Log but continue with other assets
-                _update_state(last_error=f"Fetch failed for {asset['name']}: {exc}")
+                _update_state(last_error=f"Fetch failed for {product['name']}: {exc}")
                 continue
 
-            summaries = [format_cve_summary(c, asset["keyword"]) for c in raw_cves]
+            summaries = [format_cve_summary(c, product["keyword"]) for c in raw_cves]
             total_cves += len(summaries)
 
             for summary in summaries:
@@ -108,62 +107,62 @@ def run_scan(triggered_by: str = "manual", dry_run: bool = False) -> Optional[in
                         "reason": "(dry run — scoring skipped)",
                     }
 
-                _upsert_cve(asset["id"], summary, score, scan_run_id)
+                _upsert_cve(product["id"], summary, score)
 
-        _finish_scan(scan_run_id, cves_found=total_cves, status="completed")
-        return scan_run_id
+        _finish_check(check_run_id, cves_found=total_cves, status="completed")
+        return check_run_id
 
     except Exception as exc:
-        if scan_run_id:
-            _finish_scan(scan_run_id, cves_found=0, status="failed", error=str(exc))
+        if check_run_id:
+            _finish_check(check_run_id, cves_found=0, status="failed", error=str(exc))
         _update_state(last_error=str(exc))
-        return scan_run_id
+        return check_run_id
     finally:
-        _update_state(is_running=False, current_asset=None)
+        _update_state(is_running=False, current_product=None)
         _lock.release()
 
 
 def _update_state(**kwargs: Any) -> None:
-    scan_state.update(kwargs)
+    check_state.update(kwargs)
 
 
-def _finish_scan(
-    scan_run_id: int,
+def _finish_check(
+    check_run_id: int,
     cves_found: int,
     status: str,
     error: Optional[str] = None,
 ) -> None:
     with get_db() as conn:
         conn.execute(
-            "UPDATE scan_runs SET finished_at = datetime('now'), cves_found = ?, status = ?, error = ? "
+            "UPDATE check_runs SET finished_at = datetime('now'), cves_found = ?, status = ?, error = ? "
             "WHERE id = ?",
-            (cves_found, status, error, scan_run_id),
+            (cves_found, status, error, check_run_id),
         )
 
 
-def _upsert_cve(asset_id: int, summary: dict, score: dict, scan_run_id: int) -> None:
+def _upsert_cve(product_id: int, summary: dict, score: dict) -> None:
     with get_db() as conn:
         conn.execute(
             """
             INSERT INTO cves (
-                cve_id, asset_id, published, cvss_score, description, nvd_url,
+                cve_id, product_id, published, cvss_score, description, nvd_url,
                 exposure_score, telco_cnf_relevance, recommended_action, reason,
-                scanned_at
+                checked_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-            ON CONFLICT(cve_id, asset_id) DO UPDATE SET
-                published       = excluded.published,
-                cvss_score      = excluded.cvss_score,
-                description     = excluded.description,
-                nvd_url         = excluded.nvd_url,
-                exposure_score  = excluded.exposure_score,
+            ON CONFLICT(cve_id, product_id) DO UPDATE SET
+                published           = excluded.published,
+                cvss_score          = excluded.cvss_score,
+                description         = excluded.description,
+                nvd_url             = excluded.nvd_url,
+                exposure_score      = excluded.exposure_score,
                 telco_cnf_relevance = excluded.telco_cnf_relevance,
                 recommended_action  = excluded.recommended_action,
-                reason          = excluded.reason,
-                scanned_at      = excluded.scanned_at
+                reason              = excluded.reason,
+                checked_at          = excluded.checked_at
             """,
             (
                 summary["cve_id"],
-                asset_id,
+                product_id,
                 summary.get("published"),
                 summary.get("cvss_score"),
                 summary.get("description"),

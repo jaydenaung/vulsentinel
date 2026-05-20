@@ -23,7 +23,7 @@ def cve_list(request: Request):
         return RedirectResponse("/login", status_code=303)
 
     params = request.query_params
-    asset_id = params.get("asset_id", "")
+    product_id = params.get("product_id", "")
     action = params.get("action", "")
     status = params.get("status", "")
     search = params.get("search", "")
@@ -33,9 +33,9 @@ def cve_list(request: Request):
     where_clauses = []
     bind: list = []
 
-    if asset_id:
-        where_clauses.append("c.asset_id = ?")
-        bind.append(int(asset_id))
+    if product_id:
+        where_clauses.append("c.product_id = ?")
+        bind.append(int(product_id))
     if action:
         where_clauses.append("c.recommended_action = ?")
         bind.append(action)
@@ -55,8 +55,8 @@ def cve_list(request: Request):
 
         rows = conn.execute(
             f"""
-            SELECT c.*, a.name as asset_name
-            FROM cves c JOIN assets a ON a.id = c.asset_id
+            SELECT c.*, p.name as product_name
+            FROM cves c JOIN products p ON p.id = c.product_id
             {where_sql}
             ORDER BY
                 CASE c.recommended_action
@@ -64,13 +64,13 @@ def cve_list(request: Request):
                     WHEN 'MONITOR' THEN 1
                     ELSE 2 END,
                 c.cvss_score DESC NULLS LAST,
-                c.scanned_at DESC
+                c.checked_at DESC
             LIMIT ? OFFSET ?
             """,
             bind + [PAGE_SIZE, offset],
         ).fetchall()
 
-        assets = conn.execute("SELECT id, name FROM assets ORDER BY name").fetchall()
+        products = conn.execute("SELECT id, name FROM products ORDER BY name").fetchall()
 
     total_pages = max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE)
 
@@ -78,11 +78,11 @@ def cve_list(request: Request):
         "user": user,
         "active_page": "cves",
         "cves": [dict(r) for r in rows],
-        "assets": [dict(r) for r in assets],
+        "products": [dict(r) for r in products],
         "total": total,
         "page": page,
         "total_pages": total_pages,
-        "filters": {"asset_id": asset_id, "action": action, "status": status, "search": search},
+        "filters": {"product_id": product_id, "action": action, "status": status, "search": search},
     })
 
 
@@ -94,7 +94,7 @@ def cve_detail(cve_db_id: int, request: Request):
 
     with get_db() as conn:
         row = conn.execute(
-            "SELECT c.*, a.name as asset_name FROM cves c JOIN assets a ON a.id = c.asset_id WHERE c.id = ?",
+            "SELECT c.*, p.name as product_name FROM cves c JOIN products p ON p.id = c.product_id WHERE c.id = ?",
             (cve_db_id,),
         ).fetchone()
 

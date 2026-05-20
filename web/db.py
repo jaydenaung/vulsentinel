@@ -38,7 +38,7 @@ def init_db() -> None:
                 created_at TEXT NOT NULL DEFAULT (datetime('now'))
             );
 
-            CREATE TABLE IF NOT EXISTS assets (
+            CREATE TABLE IF NOT EXISTS products (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
                 keyword TEXT NOT NULL,
@@ -50,7 +50,7 @@ def init_db() -> None:
             CREATE TABLE IF NOT EXISTS cves (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 cve_id TEXT NOT NULL,
-                asset_id INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+                product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
                 published TEXT,
                 cvss_score REAL,
                 description TEXT,
@@ -63,11 +63,11 @@ def init_db() -> None:
                 epss_score REAL,
                 status TEXT NOT NULL DEFAULT 'open',
                 notes TEXT DEFAULT '',
-                scanned_at TEXT NOT NULL DEFAULT (datetime('now')),
-                UNIQUE(cve_id, asset_id)
+                checked_at TEXT NOT NULL DEFAULT (datetime('now')),
+                UNIQUE(cve_id, product_id)
             );
 
-            CREATE TABLE IF NOT EXISTS scan_runs (
+            CREATE TABLE IF NOT EXISTS check_runs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 triggered_by TEXT,
                 started_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -83,9 +83,9 @@ def init_db() -> None:
             );
 
             INSERT OR IGNORE INTO settings VALUES
-                ('scan_interval_hours', '24'),
-                ('scan_days_lookback', '7'),
-                ('max_cves_per_asset', '50'),
+                ('check_interval_hours', '24'),
+                ('check_days_lookback', '7'),
+                ('max_cves_per_product', '50'),
                 ('nvd_rate_limit_delay', '6.5'),
                 ('env_context', '');
         """)

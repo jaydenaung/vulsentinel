@@ -8,7 +8,7 @@ from fastapi.templating import Jinja2Templates
 
 from web.auth import get_session_user
 from web.db import get_db
-from web.scanner import scan_state
+from web.scanner import check_state
 
 router = APIRouter()
 templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "..", "templates"))
@@ -31,32 +31,29 @@ def dashboard(request: Request):
         low_pri = conn.execute(
             "SELECT COUNT(*) FROM cves WHERE recommended_action = 'LOW PRIORITY'"
         ).fetchone()[0]
-        total_assets = conn.execute("SELECT COUNT(*) FROM assets WHERE active = 1").fetchone()[0]
+        total_products = conn.execute("SELECT COUNT(*) FROM products WHERE active = 1").fetchone()[0]
 
-        # CVEs per asset
-        asset_counts = conn.execute("""
-            SELECT a.name, a.id,
+        product_counts = conn.execute("""
+            SELECT p.name, p.id,
                    COUNT(c.id) as total,
                    SUM(CASE WHEN c.recommended_action = 'PATCH NOW' THEN 1 ELSE 0 END) as critical
-            FROM assets a
-            LEFT JOIN cves c ON c.asset_id = a.id
-            WHERE a.active = 1
-            GROUP BY a.id
+            FROM products p
+            LEFT JOIN cves c ON c.product_id = p.id
+            WHERE p.active = 1
+            GROUP BY p.id
             ORDER BY critical DESC, total DESC
         """).fetchall()
 
-        # Recent PATCH NOW CVEs
         recent_critical = conn.execute("""
-            SELECT c.*, a.name as asset_name
-            FROM cves c JOIN assets a ON a.id = c.asset_id
+            SELECT c.*, p.name as product_name
+            FROM cves c JOIN products p ON p.id = c.product_id
             WHERE c.recommended_action = 'PATCH NOW'
-            ORDER BY c.scanned_at DESC
+            ORDER BY c.checked_at DESC
             LIMIT 10
         """).fetchall()
 
-        # Last scan run
-        last_scan = conn.execute(
-            "SELECT * FROM scan_runs ORDER BY started_at DESC LIMIT 1"
+        last_check = conn.execute(
+            "SELECT * FROM check_runs ORDER BY started_at DESC LIMIT 1"
         ).fetchone()
 
     return templates.TemplateResponse(request, "dashboard.html", {
@@ -66,9 +63,9 @@ def dashboard(request: Request):
         "patch_now": patch_now,
         "monitor": monitor,
         "low_pri": low_pri,
-        "total_assets": total_assets,
-        "asset_counts": [dict(r) for r in asset_counts],
+        "total_products": total_products,
+        "product_counts": [dict(r) for r in product_counts],
         "recent_critical": [dict(r) for r in recent_critical],
-        "last_scan": dict(last_scan) if last_scan else None,
-        "scan_running": scan_state["is_running"],
+        "last_check": dict(last_check) if last_check else None,
+        "check_running": check_state["is_running"],
     })
