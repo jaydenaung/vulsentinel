@@ -20,6 +20,7 @@ import anthropic
 from pydantic import BaseModel, Field, ValidationError
 
 from enrichment import Evidence
+from prompt_guard import clean_description
 from prompts import get_prompt
 from settings import get_settings
 
@@ -96,8 +97,8 @@ def build_batch_prompt(items: list[tuple[dict[str, Any], Evidence]], env_context
             product=html.escape(str(s.get("product", "")), quote=True),
             cvss_score=s.get("cvss_score") if s.get("cvss_score") is not None else "N/A",
             epss=_fmt_epss(ev),
-            # Escape so a description cannot close the <cve> block and inject instructions.
-            description=html.escape(str(s.get("description", ""))[:800], quote=False),
+            # Strip hidden characters, then escape so a description cannot close its <cve> block.
+            description=html.escape(clean_description(str(s.get("description", ""))), quote=False),
         )
         for s, ev in items
     ]

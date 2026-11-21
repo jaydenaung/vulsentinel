@@ -8,6 +8,10 @@ Order per CVE:
   3. no CVSS yet                      -> MONITOR, awaiting  (rule:no_cvss)
   4. CVSS and EPSS both low           -> LOW PRIORITY       (rule:low)
   5. everything else                  -> Claude, batched    (ai)
+     description reads like orders     -> Claude, alone      (ai_isolated)
+
+After Claude answers, code floors apply: a flagged CVE or one with EPSS >= 0.4 can never
+end up LOW PRIORITY. A steered answer can only move a CVE up, never hide it.
 """
 
 import hashlib
@@ -19,12 +23,15 @@ import anthropic
 from pydantic import BaseModel
 
 from enrichment import Evidence, enrich
+from prompt_guard import injection_signals
 from scorer import FALLBACK_REASON, Usage, score_batch
 from settings import estimate_cost_usd, get_settings
 
 log = logging.getLogger(__name__)
 
-DecidedBy = Literal["rule:kev", "rule:no_cvss", "rule:low", "ai", "fallback", "dry_run"]
+DecidedBy = Literal["rule:kev", "rule:no_cvss", "rule:low", "ai", "ai_isolated", "fallback", "dry_run"]
+
+EPSS_FLOOR = 0.4  # at or above this, the AI may not say LOW PRIORITY
 
 
 class Decision(BaseModel):
@@ -44,6 +51,7 @@ class TriageStats(BaseModel):
     rule_decided: int = 0
     ai_decided: int = 0
     fallback: int = 0
+    flagged: int = 0
     usage: Usage = Usage()
     cost_usd: float | None = 0.0
 
@@ -100,6 +108,35 @@ def rule_decision(summary: dict[str, Any], ev: Evidence, h: str) -> Decision | N
     return None
 
 
+GrayItem = tuple[dict[str, Any], Evidence, str]
+
+
+def _split_flagged(gray: list[GrayItem]) -> tuple[list[GrayItem], list[GrayItem]]:
+    """Separate CVEs whose description reads like instructions, so they are scored alone."""
+    batch_ids = {s["cve_id"] for s, _, _ in gray}
+    normal: list[GrayItem] = []
+    isolated: list[GrayItem] = []
+    for item in gray:
+        signals = injection_signals(str(item[0].get("description", "")), item[0]["cve_id"], batch_ids)
+        if signals:
+            log.warning("Isolating %s: description matched %s", item[0]["cve_id"], ",".join(signals))
+            isolated.append(item)
+        else:
+            normal.append(item)
+    return normal, isolated
+
+
+def apply_floors(action: str, reason: str, ev: Evidence, flagged: bool) -> tuple[str, str]:
+    """Code has the last word: some CVEs may not be lowered to LOW PRIORITY by the model."""
+    if action != "LOW PRIORITY":
+        return action, reason
+    if flagged:
+        return "MONITOR", f"{reason} [Raised to MONITOR: description contained instruction-like text.]"
+    if ev.epss_score is not None and ev.epss_score >= EPSS_FLOOR:
+        return "MONITOR", f"{reason} [Raised to MONITOR: EPSS {ev.epss_score:.2f} is elevated.]"
+    return action, reason
+
+
 def triage(
     summaries: list[dict[str, Any]],
     env_context: str,
@@ -117,7 +154,7 @@ def triage(
     evidence = enrich(list(unique))
     stats = TriageStats()
     decisions: dict[str, Decision] = {}
-    gray: list[tuple[dict[str, Any], Evidence, str]] = []
+    gray: list[GrayItem] = []
 
     for cve_id, summary in unique.items():
         ev = evidence.get(cve_id, Evidence())
@@ -138,21 +175,29 @@ def triage(
         stats.finish(cfg.anthropic_model)
         return decisions, evidence, stats
 
-    for i in range(0, len(gray), cfg.ai_batch_size):
-        batch = gray[i:i + cfg.ai_batch_size]
+    normal, isolated = _split_flagged(gray)
+    stats.flagged = len(isolated)
+    batches = [normal[i:i + cfg.ai_batch_size] for i in range(0, len(normal), cfg.ai_batch_size)]
+    batches += [[item] for item in isolated]  # flagged CVEs never share a request
+    flagged_ids = {s["cve_id"] for s, _, _ in isolated}
+
+    for batch in batches:
         results = score_batch(client, [(s, ev) for s, ev, _ in batch], env_context, stats.usage)
         for s, ev, h in batch:
-            r = results.get(s["cve_id"])
-            if r:
-                decisions[s["cve_id"]] = _decision(s["cve_id"], ev, h, "ai", r.recommended_action, r.reason,
-                                                   r.exposure_score, r.telco_cnf_relevance)
-                stats.ai_decided += 1
-            else:
-                decisions[s["cve_id"]] = _decision(s["cve_id"], ev, None, "fallback", "MONITOR", FALLBACK_REASON)
+            cve_id = s["cve_id"]
+            r = results.get(cve_id)
+            if r is None:
+                decisions[cve_id] = _decision(cve_id, ev, None, "fallback", "MONITOR", FALLBACK_REASON)
                 stats.fallback += 1
+                continue
+            flagged = cve_id in flagged_ids
+            action, reason = apply_floors(r.recommended_action, r.reason, ev, flagged)
+            decisions[cve_id] = _decision(cve_id, ev, h, "ai_isolated" if flagged else "ai", action, reason,
+                                          r.exposure_score, r.telco_cnf_relevance)
+            stats.ai_decided += 1
 
     stats.finish(cfg.anthropic_model)
-    log.info("Triage: %d cached, %d rule, %d ai, %d fallback, %d calls, %d in / %d out tokens, cost %s",
-             stats.cached, stats.rule_decided, stats.ai_decided, stats.fallback, stats.usage.calls,
+    log.info("Triage: %d cached, %d rule, %d ai (%d isolated), %d fallback, %d calls, %d in / %d out tokens, cost %s",
+             stats.cached, stats.rule_decided, stats.ai_decided, stats.flagged, stats.fallback, stats.usage.calls,
              stats.usage.input_tokens, stats.usage.output_tokens, stats.cost_usd)
     return decisions, evidence, stats

@@ -1,6 +1,8 @@
 {#- Who decided this CVE: a deterministic rule or Claude. Expects `d` (decided_by value). -#}
 {%- if d == 'ai' -%}
 <span class="badge bg-info text-dark" title="Decided by Claude (gray zone)"><i class="bi bi-robot"></i> AI</span>
+{%- elif d == 'ai_isolated' -%}
+<span class="badge bg-warning text-dark" title="Description looked like instructions to the AI, so it was scored alone and cannot go below MONITOR"><i class="bi bi-shield-exclamation"></i> AI (isolated)</span>
 {%- elif d == 'rule:kev' -%}
 <span class="badge bg-secondary" title="Rule: listed in CISA KEV"><i class="bi bi-gear"></i> Rule: KEV</span>
 {%- elif d == 'rule:low' -%}
