@@ -11,9 +11,11 @@ Usage:
     python agent.py --dry-run        # fetch CVEs only, skip Claude scoring
     python agent.py --serve          # start the web dashboard server
     python agent.py --serve --port 9000 --host 127.0.0.1
+    python agent.py --reset-password admin   # prompts for a new password (hidden input)
 """
 
 import argparse
+import getpass
 import sys
 from datetime import date
 
@@ -22,6 +24,7 @@ import yaml
 from fetcher import fetch_cves, format_cve_summary
 from reporter import generate_report, write_report
 from scorer import build_client, score_cve
+from settings import ConfigError, load_dotenv
 
 
 def load_config(path: str = "config.yaml") -> dict:
@@ -40,8 +43,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--host",
-        default="0.0.0.0",
-        help="Host to bind the web server to (default: 0.0.0.0).",
+        default="127.0.0.1",
+        help="Host to bind the web server to (default: 127.0.0.1; use 0.0.0.0 to expose on the network).",
     )
     parser.add_argument(
         "--port",
@@ -65,20 +68,63 @@ def parse_args() -> argparse.Namespace:
         default="config.yaml",
         help="Path to config file (default: config.yaml).",
     )
+    parser.add_argument(
+        "--reset-password",
+        metavar="USERNAME",
+        help="Set a new password for a web user (prompts, input hidden).",
+    )
     return parser.parse_args()
+
+
+def reset_password(username: str, prompt=getpass.getpass) -> int:
+    """Reset a web user's password from the terminal. Never echoes or logs the password."""
+    from web.auth import hash_password, password_problem
+    from web.db import get_db, init_db
+
+    init_db()
+    with get_db() as conn:
+        exists = conn.execute("SELECT 1 FROM users WHERE username = ?", (username,)).fetchone()
+    if not exists:
+        print(f"ERROR: no user named {username!r}", file=sys.stderr)
+        return 1
+
+    password = prompt(f"New password for {username}: ")
+    if password != prompt("Repeat new password: "):
+        print("ERROR: passwords do not match", file=sys.stderr)
+        return 1
+    problem = password_problem(password)
+    if problem:
+        print(f"ERROR: {problem}", file=sys.stderr)
+        return 1
+
+    with get_db() as conn:
+        conn.execute("UPDATE users SET password_hash = ? WHERE username = ?", (hash_password(password), username))
+    print(f"Password updated for {username}.")
+    return 0
 
 
 def main() -> int:
     args = parse_args()
+    load_dotenv()
+
+    if args.reset_password:
+        return reset_password(args.reset_password.strip())
 
     # ── Web server mode ──────────────────────────────────────────────────────
     if args.serve:
         import logging
+
         import uvicorn
+
         from web.app import create_app
         logging.basicConfig(level=logging.INFO, format="%(levelname)s  %(message)s")
-        print(f"VulSentinel — starting web server on http://{args.host}:{args.port}")
-        uvicorn.run(create_app(), host=args.host, port=args.port)
+        try:
+            app = create_app()
+        except ConfigError as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            return 1
+        print(f"VulSentinel: starting web server on http://{args.host}:{args.port}")
+        uvicorn.run(app, host=args.host, port=args.port, proxy_headers=True)
         return 0
 
     # ── Load config ──────────────────────────────────────────────────────────
@@ -109,7 +155,7 @@ def main() -> int:
     if not args.dry_run:
         try:
             client = build_client()
-        except EnvironmentError as exc:
+        except OSError as exc:
             print(f"ERROR: {exc}", file=sys.stderr)
             return 1
 
@@ -146,7 +192,9 @@ def main() -> int:
             })
         findings = all_summaries
     else:
-        assert client is not None
+        if client is None:  # unreachable: client is built whenever not dry_run
+            print("ERROR: Claude client not initialised", file=sys.stderr)
+            return 1
         print("\nScoring CVEs with Claude AI...")
         for i, summary in enumerate(all_summaries, 1):
             cve_id = summary["cve_id"]

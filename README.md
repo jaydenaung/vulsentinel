@@ -39,7 +39,8 @@ NVD API ──► fetcher.py ──► scorer.py (agentic loop) ──► report
 
 ## Prerequisites
 
-- Python 3.11+
+- Python 3.12+ (3.14 recommended, pinned in `.python-version`)
+- [uv](https://docs.astral.sh/uv/) (recommended) or pip
 - `ANTHROPIC_API_KEY` or `CLAUDEAPI` environment variable set
 
 ## Setup
@@ -48,23 +49,44 @@ NVD API ──► fetcher.py ──► scorer.py (agentic loop) ──► report
 git clone https://github.com/jaydenaung/vulsentinel.git
 cd vulsentinel
 
-python -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
-
-pip install -r requirements.txt
+uv sync                # creates .venv from the locked, pinned dependencies (uv.lock)
+cp .env.example .env   # then set ANTHROPIC_API_KEY and CVE_SECRET_KEY
 ```
+
+Without uv: `python -m venv .venv && .venv/bin/pip install -r requirements.txt` (generated from `uv.lock`).
+
+Development:
+
+```bash
+uv run pytest          # tests (no network, no API spend)
+uv run ruff check      # lint, including security rules (S)
+```
+
+Forgot the admin password? `uv run python agent.py --reset-password admin` (prompts, input hidden).
+
+`CVE_SECRET_KEY` is required for the web server (32+ characters). Generate one with:
+
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(48))"
+```
+
+`.env` is loaded automatically and is gitignored. Variables already set in your shell win.
+
+Optional: set `NVD_API_KEY` ([request one free](https://nvd.nist.gov/developers/request-an-api-key)) to raise the NVD rate limit about 10x (request delay drops from 6.5s to 0.6s).
 
 ## Usage
 
 ### Web Dashboard (primary)
 
 ```bash
-python agent.py --serve              # http://0.0.0.0:8000
-python agent.py --serve --port 8001  # custom port
-python agent.py --serve --host 127.0.0.1 --port 8001
+python agent.py --serve                       # http://127.0.0.1:8000 (local only)
+python agent.py --serve --port 8001           # custom port
+python agent.py --serve --host 0.0.0.0        # expose on your network
 ```
 
 On first visit, the setup wizard creates your admin account and optionally imports products from `config.yaml`.
+
+**Security notes:** all forms are CSRF-protected, responses carry a strict CSP, and the session cookie is `HttpOnly` + `SameSite=Lax`. `CVE_COOKIE_SECURE=auto` (default) marks cookies `Secure` when the request is HTTPS; put the app behind a TLS proxy before exposing it beyond localhost.
 
 ### CLI (one-off check)
 

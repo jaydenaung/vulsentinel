@@ -1,0 +1,43 @@
+[project]
+name = "vulsentinel"
+version = "0.2.0"
+description = "AI-powered CVE triage agent for cloud-native and telco/5G environments"
+license = "Apache-2.0"
+requires-python = ">=3.12"
+dependencies = [
+    "anthropic==1.8.0",
+    "requests==2.34.2",
+    "pyyaml==6.0.3",
+    "pydantic==2.13.5",
+    "fastapi==0.141.1",
+    "uvicorn[standard]==0.53.0",
+    "jinja2==3.1.6",
+    "python-multipart==0.0.32",
+    "bcrypt==5.0.0",
+    "itsdangerous==2.2.0",
+    "apscheduler==3.11.3",
+]
+
+[dependency-groups]
+dev = [
+    "pytest==8.4.2",
+    "ruff==0.17.6",
+]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 120
+target-version = "py312"
+extend-exclude = [".venv*", "reports"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S", "SIM"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101", "S105", "S106"]  # asserts and fixture passwords are fine in tests
