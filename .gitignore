@@ -32,3 +32,5 @@ memory/
 *.db-shm
 *.db.bak
 *.db.*.bak
+*.bak-shm
+*.bak-wal
