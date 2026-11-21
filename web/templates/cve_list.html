@@ -95,6 +95,7 @@
             {% else %}
             <span class="badge bg-success">LOW</span>
             {% endif %}
+            {% with d = c.decided_by %}{% include "_decided_by.html" %}{% endwith %}
           </td>
           <td>
             {% if c.status == 'open' %}<span class="badge bg-secondary">open</span>

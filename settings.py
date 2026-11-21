@@ -24,7 +24,13 @@ class Settings(BaseModel):
     anthropic_model: str = Field(default="claude-sonnet-4-6", min_length=1)
     anthropic_max_tokens: int = Field(default=4096, ge=256, le=64000)
     max_agent_turns: int = Field(default=6, ge=2, le=20)
-    triage_prompt_version: str = "v2"
+    triage_prompt_version: str = "v3"
+
+    # Deterministic triage rules (decide without AI)
+    rule_low_cvss_below: float = Field(default=4.0, ge=0, le=10)  # CVSS under this ...
+    rule_low_epss_below: float = Field(default=0.05, ge=0, le=1)  # ... and EPSS under this = LOW PRIORITY
+    ai_batch_size: int = Field(default=10, ge=1, le=25)  # gray-zone CVEs per Claude request
+    epss_bulk_size: int = Field(default=100, ge=1, le=100)  # CVEs per EPSS API request
 
     # Enrichment sources
     cisa_kev_url: str = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
@@ -44,6 +50,23 @@ class Settings(BaseModel):
     secret_key: SecretStr | None = None
     cookie_secure: Literal["auto", "true", "false"] = "auto"
     session_max_age_seconds: int = 86400 * 7
+
+
+# USD per million tokens (input, output). Used only for the token meter estimate.
+MODEL_PRICES_PER_MTOK: dict[str, tuple[float, float]] = {
+    "claude-sonnet-4-6": (3.00, 15.00),
+    "claude-sonnet-5-5": (2.00, 10.00),
+    "claude-opus-5-5": (4.00, 20.00),
+    "claude-haiku-5-5": (0.10, 0.50),
+    "claude-haiku-4-5": (1.00, 5.00),
+}
+
+
+def estimate_cost_usd(model: str, input_tokens: int, output_tokens: int) -> float | None:
+    prices = MODEL_PRICES_PER_MTOK.get(model)
+    if prices is None:
+        return None
+    return round((input_tokens * prices[0] + output_tokens * prices[1]) / 1_000_000, 6)
 
 
 class ConfigError(RuntimeError):

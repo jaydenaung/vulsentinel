@@ -119,6 +119,30 @@ def init_db() -> None:
     _migrate_db()
 
 
+# v3 columns: who decided each CVE (rule or AI), input hash for skip-if-unchanged, token meter.
+# Names and types are literals from this module, never user input.
+_ADD_COLUMNS: dict[str, list[tuple[str, str]]] = {
+    "cves": [("decided_by", "TEXT"), ("input_hash", "TEXT")],
+    "check_runs": [
+        ("ai_calls", "INTEGER DEFAULT 0"),
+        ("ai_input_tokens", "INTEGER DEFAULT 0"),
+        ("ai_output_tokens", "INTEGER DEFAULT 0"),
+        ("ai_cost_usd", "REAL"),
+        ("rule_decided", "INTEGER DEFAULT 0"),
+        ("ai_decided", "INTEGER DEFAULT 0"),
+        ("cached_skipped", "INTEGER DEFAULT 0"),
+    ],
+}
+
+
+def _add_missing_columns(conn: sqlite3.Connection) -> None:
+    for table, columns in _ADD_COLUMNS.items():
+        existing = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+        for name, sql_type in columns:
+            if name not in existing:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {sql_type}")
+
+
 def _migrate_db() -> None:
     """Apply incremental schema migrations so existing DBs survive renames."""
     with get_db() as conn:
@@ -184,6 +208,10 @@ def _migrate_db() -> None:
                 DROP TABLE IF EXISTS cves_migrated;
                 PRAGMA foreign_keys = ON;
             """)
+
+    # Last, so a legacy cves rebuild above cannot drop the new columns.
+    with get_db() as conn:
+        _add_missing_columns(conn)
 
 
 def user_count() -> int:

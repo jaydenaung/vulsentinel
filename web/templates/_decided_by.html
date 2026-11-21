@@ -1,0 +1,14 @@
+{#- Who decided this CVE: a deterministic rule or Claude. Expects `d` (decided_by value). -#}
+{%- if d == 'ai' -%}
+<span class="badge bg-info text-dark" title="Decided by Claude (gray zone)"><i class="bi bi-robot"></i> AI</span>
+{%- elif d == 'rule:kev' -%}
+<span class="badge bg-secondary" title="Rule: listed in CISA KEV"><i class="bi bi-gear"></i> Rule: KEV</span>
+{%- elif d == 'rule:low' -%}
+<span class="badge bg-secondary" title="Rule: low CVSS and low EPSS"><i class="bi bi-gear"></i> Rule: low</span>
+{%- elif d == 'rule:no_cvss' -%}
+<span class="badge bg-secondary" title="Rule: no CVSS score yet"><i class="bi bi-gear"></i> Rule: no CVSS</span>
+{%- elif d == 'fallback' -%}
+<span class="badge bg-light text-dark border" title="AI unavailable, defaulted to MONITOR">Fallback</span>
+{%- elif d == 'dry_run' -%}
+<span class="badge bg-light text-dark border" title="Dry run, AI skipped">Dry run</span>
+{%- endif -%}

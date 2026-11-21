@@ -1,14 +1,16 @@
 # Copyright 2026 Jayden Aung
 # Licensed under the Apache License, Version 2.0
-"""Check orchestrator — wraps fetcher + scorer and persists results to DB."""
+"""Check orchestrator: fetch from NVD, triage (rules first, AI for the gray zone), persist."""
 
 import logging
 import threading
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any
 
+from enrichment import Evidence
 from fetcher import fetch_cves, format_cve_summary
-from scorer import build_client, score_cve
+from scorer import build_client
+from triage import Decision, TriageStats, triage
 from web.db import get_db, get_setting
 
 log = logging.getLogger(__name__)
@@ -42,7 +44,7 @@ def run_check(triggered_by: str = "manual", dry_run: bool = False) -> int | None
     check_run_id: int | None = None
     try:
         _update_state(is_running=True, triggered_by=triggered_by, progress=0, total=0,
-                      current_product=None, last_error=None, started_at=datetime.utcnow().isoformat())
+                      current_product=None, last_error=None, started_at=datetime.now(UTC).isoformat())
 
         days = int(get_setting("check_days_lookback", "7"))
         max_per_product = int(get_setting("max_cves_per_product", "50"))
@@ -80,11 +82,10 @@ def run_check(triggered_by: str = "manual", dry_run: bool = False) -> int | None
                 return check_run_id
 
         _update_state(total=len(products))
-        total_cves = 0
+        collected: list[tuple[int, dict]] = []  # (product_id, summary)
 
         for i, product in enumerate(products, 1):
             _update_state(current_product=product["name"], progress=i)
-
             try:
                 raw_cves = fetch_cves(
                     product["keyword"],
@@ -96,24 +97,22 @@ def run_check(triggered_by: str = "manual", dry_run: bool = False) -> int | None
                 log.exception("Check %s: NVD fetch failed for %s", check_run_id, product["name"])
                 _update_state(last_error=f"Fetch failed for {product['name']}")
                 continue
+            collected += [(product["id"], format_cve_summary(c, product["keyword"])) for c in raw_cves]
 
-            summaries = [format_cve_summary(c, product["keyword"]) for c in raw_cves]
-            total_cves += len(summaries)
+        # One triage pass over all products: enrich once, skip unchanged, rules, then AI batches.
+        _update_state(current_product="Triage")
+        decisions, evidence, stats = triage(
+            [s for _, s in collected], env_context, client, known_hashes=_known_hashes(collected),
+        )
+        for product_id, summary in collected:
+            decision = decisions.get(summary["cve_id"])
+            if decision:
+                _upsert_cve(product_id, summary, decision)
+            else:
+                _refresh_evidence(product_id, summary, evidence.get(summary["cve_id"]))
 
-            for summary in summaries:
-                if client and not dry_run:
-                    score = score_cve(client, summary, env_context)
-                else:
-                    score = {
-                        "exposure_score": None,
-                        "telco_cnf_relevance": "N/A",
-                        "recommended_action": "MONITOR",
-                        "reason": "(dry run — scoring skipped)",
-                    }
-
-                _upsert_cve(product["id"], summary, score)
-
-        _finish_check(check_run_id, cves_found=total_cves, status="completed")
+        _record_meter(check_run_id, stats)
+        _finish_check(check_run_id, cves_found=len(collected), status="completed")
         return check_run_id
 
     except Exception:
@@ -145,15 +144,50 @@ def _finish_check(
         )
 
 
-def _upsert_cve(product_id: int, summary: dict, score: dict) -> None:
+def _known_hashes(collected: list[tuple[int, dict]]) -> dict[str, str]:
+    """cve_id -> stored input_hash, only when every (product, CVE) pair seen now already has that hash.
+
+    A CVE newly matched by another product is not skipped, so it gets its own row.
+    """
+    with get_db() as conn:
+        stored = {(r["cve_id"], r["product_id"]): r["input_hash"]
+                  for r in conn.execute("SELECT cve_id, product_id, input_hash FROM cves")}
+    pairs: dict[str, set[str | None]] = {}
+    for product_id, summary in collected:
+        pairs.setdefault(summary["cve_id"], set()).add(stored.get((summary["cve_id"], product_id)))
+    return {cve_id: next(iter(h)) for cve_id, h in pairs.items() if len(h) == 1 and None not in h}  # type: ignore[misc]
+
+
+def _record_meter(check_run_id: int, stats: TriageStats) -> None:
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE check_runs SET ai_calls = ?, ai_input_tokens = ?, ai_output_tokens = ?, ai_cost_usd = ?, "
+            "rule_decided = ?, ai_decided = ?, cached_skipped = ? WHERE id = ?",
+            (stats.usage.calls, stats.usage.input_tokens, stats.usage.output_tokens, stats.cost_usd,
+             stats.rule_decided, stats.ai_decided + stats.fallback, stats.cached, check_run_id),
+        )
+
+
+def _refresh_evidence(product_id: int, summary: dict, ev: Evidence | None) -> None:
+    """Unchanged CVE: keep the decision, refresh EPSS (it moves daily within a level)."""
+    if ev is None:
+        return
+    with get_db() as conn:
+        conn.execute(
+            "UPDATE cves SET epss_score = ?, checked_at = datetime('now') WHERE cve_id = ? AND product_id = ?",
+            (ev.epss_score, summary["cve_id"], product_id),
+        )
+
+
+def _upsert_cve(product_id: int, summary: dict, d: Decision) -> None:
     with get_db() as conn:
         conn.execute(
             """
             INSERT INTO cves (
                 cve_id, product_id, published, cvss_score, description, nvd_url,
                 exposure_score, telco_cnf_relevance, recommended_action, reason,
-                in_kev, epss_score, checked_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+                in_kev, epss_score, decided_by, input_hash, checked_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
             ON CONFLICT(cve_id, product_id) DO UPDATE SET
                 published           = excluded.published,
                 cvss_score          = excluded.cvss_score,
@@ -165,6 +199,8 @@ def _upsert_cve(product_id: int, summary: dict, score: dict) -> None:
                 reason              = excluded.reason,
                 in_kev              = excluded.in_kev,
                 epss_score          = excluded.epss_score,
+                decided_by          = excluded.decided_by,
+                input_hash          = excluded.input_hash,
                 checked_at          = excluded.checked_at
             """,
             (
@@ -174,11 +210,13 @@ def _upsert_cve(product_id: int, summary: dict, score: dict) -> None:
                 summary.get("cvss_score"),
                 summary.get("description"),
                 summary.get("nvd_url"),
-                score.get("exposure_score"),
-                score.get("telco_cnf_relevance"),
-                score.get("recommended_action", "MONITOR"),
-                score.get("reason"),
-                1 if score.get("in_kev") else 0,
-                score.get("epss_score"),
+                d.exposure_score,
+                d.telco_cnf_relevance,
+                d.recommended_action,
+                d.reason,
+                1 if d.in_kev else 0,
+                d.epss_score,
+                d.decided_by,
+                d.input_hash,
             ),
         )

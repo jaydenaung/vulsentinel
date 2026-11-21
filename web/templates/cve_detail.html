@@ -22,6 +22,7 @@
           {% else %}
           <span class="badge bg-success fs-6">LOW PRIORITY</span>
           {% endif %}
+          {% with d = cve.decided_by %}{% include "_decided_by.html" %}{% endwith %}
         </div>
       </div>
       <div class="card-body">

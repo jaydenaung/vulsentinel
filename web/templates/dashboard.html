@@ -180,6 +180,21 @@
           <dd class="col-7">{{ last_check.cves_found }}</dd>
           <dt class="col-5 text-muted">Triggered by</dt>
           <dd class="col-7">{{ last_check.triggered_by or '—' }}</dd>
+          <dt class="col-5 text-muted">Decided</dt>
+          <dd class="col-7">
+            <span title="Decided by deterministic rules">{{ last_check.rule_decided or 0 }} rule</span>,
+            <span title="Decided by Claude">{{ last_check.ai_decided or 0 }} AI</span>,
+            <span title="Inputs unchanged since last check, skipped">{{ last_check.cached_skipped or 0 }} unchanged</span>
+          </dd>
+          <dt class="col-5 text-muted">AI usage</dt>
+          <dd class="col-7">
+            {{ last_check.ai_calls or 0 }} call(s),
+            {{ "{:,}".format(last_check.ai_input_tokens or 0) }} in /
+            {{ "{:,}".format(last_check.ai_output_tokens or 0) }} out tokens
+            {% if last_check.ai_cost_usd is not none %}
+            <span class="text-muted">(~${{ "%.4f" | format(last_check.ai_cost_usd) }})</span>
+            {% endif %}
+          </dd>
           {% if last_check.error %}
           <dt class="col-5 text-muted">Error</dt>
           <dd class="col-7 text-danger small">{{ last_check.error[:120] }}</dd>

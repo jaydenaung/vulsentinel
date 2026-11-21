@@ -120,6 +120,7 @@ def generate_report(
             lines.append(f"| In CISA KEV | {in_kev} |")
             lines.append(f"| EPSS | {epss_str} |")
             lines.append(f"| Recommended Action | **{action}** |")
+            lines.append(f"| Decided By | {f.get('decided_by', 'N/A')} |")
             lines.append("")
             lines.append(f"> {reason}")
             lines.append("")

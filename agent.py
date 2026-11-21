@@ -8,7 +8,7 @@
 Usage:
     python agent.py                  # check last 7 days (live AI scoring)
     python agent.py --days 14        # check last 14 days
-    python agent.py --dry-run        # fetch CVEs only, skip Claude scoring
+    python agent.py --dry-run        # fetch + rules only, skip Claude
     python agent.py --serve          # start the web dashboard server
     python agent.py --serve --port 9000 --host 127.0.0.1
     python agent.py --reset-password admin   # prompts for a new password (hidden input)
@@ -23,8 +23,9 @@ import yaml
 
 from fetcher import fetch_cves, format_cve_summary
 from reporter import generate_report, write_report
-from scorer import build_client, score_cve
+from scorer import build_client
 from settings import ConfigError, load_dotenv
+from triage import triage
 
 
 def load_config(path: str = "config.yaml") -> dict:
@@ -204,29 +205,21 @@ def main() -> int:
 
     print(f"\nTotal CVEs fetched: {len(all_summaries)}")
 
-    # ── Score CVEs with Claude ───────────────────────────────────────────────
-    findings: list[dict] = []
-    if args.dry_run or not all_summaries:
-        for s in all_summaries:
-            s.update({
-                "exposure_score": None,
-                "telco_cnf_relevance": "N/A",
-                "recommended_action": "MONITOR",
-                "reason": "(dry run — scoring skipped)",
-            })
-        findings = all_summaries
+    # ── Triage: rules first, Claude only for the gray zone ────────────────────
+    if args.dry_run:
+        print("\nTriage (rules only, AI skipped)...")
     else:
-        if client is None:  # unreachable: client is built whenever not dry_run
-            print("ERROR: Claude client not initialised", file=sys.stderr)
-            return 1
-        print("\nScoring CVEs with Claude AI...")
-        for i, summary in enumerate(all_summaries, 1):
-            cve_id = summary["cve_id"]
-            print(f"  [{i}/{len(all_summaries)}] {cve_id} ({summary['product']}) ...", end=" ", flush=True)
-            score = score_cve(client, summary, env_context)
-            merged = {**summary, **score}
-            findings.append(merged)
-            print(merged["recommended_action"])
+        print("\nTriage: rules first, Claude only for CVEs rules cannot decide...")
+    decisions, _evidence, stats = triage(all_summaries, env_context, client)
+    findings: list[dict] = []
+    for s in all_summaries:
+        d = decisions.get(s["cve_id"])
+        findings.append({**s, **d.model_dump(exclude={"cve_id", "input_hash"})} if d else s)
+    print(f"  Decided by rules: {stats.rule_decided}")
+    print(f"  Decided by AI:    {stats.ai_decided} (fallback {stats.fallback})")
+    cost = "unknown model price" if stats.cost_usd is None else f"~${stats.cost_usd:.4f}"
+    print(f"  AI usage:         {stats.usage.calls} call(s), {stats.usage.input_tokens} in / "
+          f"{stats.usage.output_tokens} out tokens, {cost}")
 
     # ── Generate report ──────────────────────────────────────────────────────
     print("\nGenerating report...")
