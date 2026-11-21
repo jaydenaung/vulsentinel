@@ -51,7 +51,7 @@
               <tr><td class="text-muted">Relevance</td><td>{{ cve.telco_cnf_relevance or '—' }}</td></tr>
               <tr>
                 <td class="text-muted">EPSS Score</td>
-                <td>{{ "%.3f" | format(cve.epss_score) if cve.epss_score else '—' }}</td>
+                <td>{{ "%.3f" | format(cve.epss_score) if cve.epss_score is not none else '—' }}</td>
               </tr>
               <tr>
                 <td class="text-muted">CISA KEV</td>
@@ -94,6 +94,7 @@
       <div class="card-body">
         {% if user.role == 'admin' %}
         <form method="post" action="/cves/{{ cve.id }}/update">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
           <div class="mb-3">
             <label class="form-label small fw-semibold">Status</label>
             <select name="status" class="form-select form-select-sm">

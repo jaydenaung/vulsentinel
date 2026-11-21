@@ -2,14 +2,16 @@
 # Licensed under the Apache License, Version 2.0
 """Check orchestrator — wraps fetcher + scorer and persists results to DB."""
 
+import logging
 import threading
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 from fetcher import fetch_cves, format_cve_summary
 from scorer import build_client, score_cve
 from web.db import get_db, get_setting
 
+log = logging.getLogger(__name__)
 _lock = threading.Lock()
 
 # In-memory check progress (read by /api/check/status)
@@ -29,7 +31,7 @@ def is_check_running() -> bool:
     return check_state["is_running"]
 
 
-def run_check(triggered_by: str = "manual", dry_run: bool = False) -> Optional[int]:
+def run_check(triggered_by: str = "manual", dry_run: bool = False) -> int | None:
     """Start a CVE check in the current thread (call from background thread).
 
     Returns the check_run_id on success, None if already running.
@@ -37,7 +39,7 @@ def run_check(triggered_by: str = "manual", dry_run: bool = False) -> Optional[i
     if not _lock.acquire(blocking=False):
         return None
 
-    check_run_id: Optional[int] = None
+    check_run_id: int | None = None
     try:
         _update_state(is_running=True, triggered_by=triggered_by, progress=0, total=0,
                       current_product=None, last_error=None, started_at=datetime.utcnow().isoformat())
@@ -72,8 +74,9 @@ def run_check(triggered_by: str = "manual", dry_run: bool = False) -> Optional[i
         if not dry_run:
             try:
                 client = build_client()
-            except EnvironmentError as exc:
-                _finish_check(check_run_id, cves_found=0, status="failed", error=str(exc))
+            except OSError:
+                log.error("Check %s: Claude API key not configured", check_run_id)
+                _finish_check(check_run_id, cves_found=0, status="failed", error="Claude API key not configured")
                 return check_run_id
 
         _update_state(total=len(products))
@@ -89,8 +92,9 @@ def run_check(triggered_by: str = "manual", dry_run: bool = False) -> Optional[i
                     rate_limit_delay=rate_delay,
                     max_results=max_per_product,
                 )
-            except Exception as exc:
-                _update_state(last_error=f"Fetch failed for {product['name']}: {exc}")
+            except Exception:
+                log.exception("Check %s: NVD fetch failed for %s", check_run_id, product["name"])
+                _update_state(last_error=f"Fetch failed for {product['name']}")
                 continue
 
             summaries = [format_cve_summary(c, product["keyword"]) for c in raw_cves]
@@ -112,10 +116,11 @@ def run_check(triggered_by: str = "manual", dry_run: bool = False) -> Optional[i
         _finish_check(check_run_id, cves_found=total_cves, status="completed")
         return check_run_id
 
-    except Exception as exc:
+    except Exception:
+        log.exception("Check %s failed", check_run_id)
         if check_run_id:
-            _finish_check(check_run_id, cves_found=0, status="failed", error=str(exc))
-        _update_state(last_error=str(exc))
+            _finish_check(check_run_id, cves_found=0, status="failed", error="Check failed, see server log")
+        _update_state(last_error="Check failed, see server log")
         return check_run_id
     finally:
         _update_state(is_running=False, current_product=None)
@@ -130,7 +135,7 @@ def _finish_check(
     check_run_id: int,
     cves_found: int,
     status: str,
-    error: Optional[str] = None,
+    error: str | None = None,
 ) -> None:
     with get_db() as conn:
         conn.execute(
@@ -147,8 +152,8 @@ def _upsert_cve(product_id: int, summary: dict, score: dict) -> None:
             INSERT INTO cves (
                 cve_id, product_id, published, cvss_score, description, nvd_url,
                 exposure_score, telco_cnf_relevance, recommended_action, reason,
-                checked_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+                in_kev, epss_score, checked_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
             ON CONFLICT(cve_id, product_id) DO UPDATE SET
                 published           = excluded.published,
                 cvss_score          = excluded.cvss_score,
@@ -158,6 +163,8 @@ def _upsert_cve(product_id: int, summary: dict, score: dict) -> None:
                 telco_cnf_relevance = excluded.telco_cnf_relevance,
                 recommended_action  = excluded.recommended_action,
                 reason              = excluded.reason,
+                in_kev              = excluded.in_kev,
+                epss_score          = excluded.epss_score,
                 checked_at          = excluded.checked_at
             """,
             (
@@ -171,5 +178,7 @@ def _upsert_cve(product_id: int, summary: dict, score: dict) -> None:
                 score.get("telco_cnf_relevance"),
                 score.get("recommended_action", "MONITOR"),
                 score.get("reason"),
+                1 if score.get("in_kev") else 0,
+                score.get("epss_score"),
             ),
         )

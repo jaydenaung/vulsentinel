@@ -10,7 +10,6 @@ from collections import Counter
 from datetime import date
 from typing import Any
 
-
 ACTION_ORDER = ["PATCH NOW", "MONITOR", "LOW PRIORITY"]
 ACTION_EMOJI = {
     "PATCH NOW": "🔴",
@@ -100,7 +99,10 @@ def generate_report(
             product = f.get("product", "unknown")
             cvss = f.get("cvss_score")
             cvss_str = f"{cvss:.1f}" if cvss is not None else "N/A"
-            exposure = f.get("exposure_score", "N/A")
+            exposure = f.get("exposure_score") or "N/A"
+            in_kev = "Yes" if f.get("in_kev") else ("No" if f.get("in_kev") is False else "N/A")
+            epss = f.get("epss_score")
+            epss_str = f"{epss:.3f}" if epss is not None else "N/A"
             relevance = f.get("telco_cnf_relevance", "N/A")
             reason = f.get("reason", "")
             nvd_url = f.get("nvd_url", "")
@@ -108,13 +110,15 @@ def generate_report(
 
             lines.append(f"#### [{cve_id}]({nvd_url})")
             lines.append("")
-            lines.append(f"| Field | Value |")
-            lines.append(f"|-------|-------|")
+            lines.append("| Field | Value |")
+            lines.append("|-------|-------|")
             lines.append(f"| Product | `{product}` |")
             lines.append(f"| Published | {published} |")
             lines.append(f"| CVSS Score | {cvss_str} |")
             lines.append(f"| Exposure Score | {exposure}/10 |")
             lines.append(f"| Telco/CNF Relevance | {relevance} |")
+            lines.append(f"| In CISA KEV | {in_kev} |")
+            lines.append(f"| EPSS | {epss_str} |")
             lines.append(f"| Recommended Action | **{action}** |")
             lines.append("")
             lines.append(f"> {reason}")
