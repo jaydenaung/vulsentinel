@@ -49,12 +49,14 @@
               {% if user.role == 'admin' %}
               <td>
                 <form method="post" action="/products/{{ p.id }}/toggle" class="d-inline">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                   <button class="btn btn-xs btn-sm btn-outline-secondary py-0" title="Toggle active">
                     <i class="bi {{ 'bi-pause-fill' if p.active else 'bi-play-fill' }}"></i>
                   </button>
                 </form>
                 <form method="post" action="/products/{{ p.id }}/delete" class="d-inline"
-                      onsubmit="return confirm('Delete {{ p.name }}? This removes all associated CVEs.')">
+                      data-confirm="Delete {{ p.name }}? This removes all associated CVEs.">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                   <button class="btn btn-xs btn-sm btn-outline-danger py-0" title="Delete">
                     <i class="bi bi-trash-fill"></i>
                   </button>
@@ -82,6 +84,7 @@
       <div class="card-header fw-semibold"><i class="bi bi-plus-circle-fill text-success"></i> Add Product</div>
       <div class="card-body">
         <form method="post" action="/products/add">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
           <div class="mb-3">
             <label class="form-label small fw-semibold">Display Name</label>
             <input type="text" name="name" class="form-control form-control-sm" placeholder="e.g. Linux Kernel" required>

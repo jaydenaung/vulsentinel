@@ -1,16 +1,15 @@
 """Login and logout routes."""
 
-import os
+import logging
 
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
 
-from web.auth import SESSION_COOKIE, authenticate_user, create_session
-from web.db import user_count
+from web.auth import authenticate_user, clear_session_cookie, set_session_cookie
+from web.templating import templates
 
+log = logging.getLogger(__name__)
 router = APIRouter()
-templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "..", "templates"))
 
 
 @router.get("/login", response_class=HTMLResponse)
@@ -23,31 +22,25 @@ def login_page(request: Request):
 @router.post("/login")
 async def login_submit(
     request: Request,
-    username: str = Form(...),
-    password: str = Form(...),
+    username: str = Form(..., max_length=64),
+    password: str = Form(..., max_length=256),
 ):
     user = authenticate_user(username.strip(), password)
     if not user:
+        log.info("Failed login attempt from %s", request.client.host if request.client else "unknown")
         return templates.TemplateResponse(request, "login.html", {
             "error": "Invalid username or password.",
         }, status_code=401)
 
-    token = create_session(user["id"])
     response = RedirectResponse("/dashboard", status_code=303)
-    response.set_cookie(
-        SESSION_COOKIE,
-        token,
-        max_age=86400 * 7,
-        httponly=True,
-        samesite="lax",
-    )
+    set_session_cookie(request, response, user["id"])
     return response
 
 
-@router.get("/logout")
-def logout():
+@router.post("/logout")
+def logout(request: Request):
     response = RedirectResponse("/login", status_code=303)
-    response.delete_cookie(SESSION_COOKIE)
+    clear_session_cookie(request, response)
     return response
 
 

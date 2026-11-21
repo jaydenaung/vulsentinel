@@ -9,6 +9,7 @@
       <div class="card-header fw-semibold">Check Configuration</div>
       <div class="card-body">
         <form method="post" action="/settings">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
           <div class="row g-3 mb-3">
             <div class="col-sm-6">
               <label class="form-label small fw-semibold">Check Interval (hours)</label>

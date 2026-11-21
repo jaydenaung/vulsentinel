@@ -1,16 +1,24 @@
 """Product inventory routes."""
 
-import os
+import logging
+import sqlite3
 
 from fastapi import APIRouter, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
+from pydantic import ValidationError
 
 from web.auth import get_session_user
 from web.db import get_db
+from web.forms import ProductForm
+from web.templating import templates
 
+log = logging.getLogger(__name__)
 router = APIRouter()
-templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "..", "templates"))
+
+
+def _admin(request: Request) -> dict | None:
+    user = get_session_user(request)
+    return user if user and user["role"] == "admin" else None
 
 
 @router.get("/products", response_class=HTMLResponse)
@@ -34,44 +42,42 @@ def products_page(request: Request):
         "user": user,
         "active_page": "products",
         "products": [dict(r) for r in products],
-        "msg": request.query_params.get("msg"),
-        "error": request.query_params.get("error"),
     })
 
 
 @router.post("/products/add")
 async def add_product(
     request: Request,
-    name: str = Form(...),
-    keyword: str = Form(...),
+    name: str = Form(""),
+    keyword: str = Form(""),
     description: str = Form(""),
 ):
-    user = get_session_user(request)
-    if not user or user["role"] != "admin":
+    if not _admin(request):
         return RedirectResponse("/products", status_code=303)
 
-    name = name.strip()
-    keyword = keyword.strip().lower()
-
-    if not name or not keyword:
+    if not name.strip() or not keyword.strip():
         return RedirectResponse("/products?error=Name+and+keyword+are+required", status_code=303)
+    try:
+        form = ProductForm(name=name, keyword=keyword, description=description)
+    except ValidationError:
+        return RedirectResponse("/products?error=Invalid+product+details", status_code=303)
 
     try:
         with get_db() as conn:
             conn.execute(
                 "INSERT INTO products (name, keyword, description) VALUES (?, ?, ?)",
-                (name, keyword, description.strip()),
+                (form.name, form.keyword, form.description),
             )
-    except Exception as exc:
-        return RedirectResponse(f"/products?error=Could+not+add+product:+{str(exc)[:80]}", status_code=303)
+    except sqlite3.Error:
+        log.exception("Could not add product %r", form.name)
+        return RedirectResponse("/products?error=Could+not+add+product", status_code=303)
 
     return RedirectResponse("/products?msg=Product+added+successfully", status_code=303)
 
 
 @router.post("/products/{product_id}/toggle")
 def toggle_product(product_id: int, request: Request):
-    user = get_session_user(request)
-    if not user or user["role"] != "admin":
+    if not _admin(request):
         return RedirectResponse("/products", status_code=303)
 
     with get_db() as conn:
@@ -84,8 +90,7 @@ def toggle_product(product_id: int, request: Request):
 
 @router.post("/products/{product_id}/delete")
 def delete_product(product_id: int, request: Request):
-    user = get_session_user(request)
-    if not user or user["role"] != "admin":
+    if not _admin(request):
         return RedirectResponse("/products", status_code=303)
 
     with get_db() as conn:

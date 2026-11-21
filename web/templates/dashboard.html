@@ -148,6 +148,7 @@
           <p class="mt-2 mb-0 small">No checks run yet.</p>
           {% if user.role == 'admin' %}
           <form method="post" action="/check/trigger" class="mt-3">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <button class="btn btn-sm btn-warning">
               <i class="bi bi-play-fill"></i> Run First Check
             </button>
@@ -213,23 +214,6 @@
 
 {% block scripts %}
 {% if check_running %}
-<script>
-function pollCheck() {
-  fetch('/api/check/status')
-    .then(r => r.json())
-    .then(data => {
-      if (data.is_running) {
-        const el = document.getElementById('checkProgress');
-        if (el && data.total > 0) {
-          el.textContent = `(${data.progress}/${data.total}: ${data.current_product || ''})`;
-        }
-        setTimeout(pollCheck, 3000);
-      } else {
-        location.reload();
-      }
-    });
-}
-setTimeout(pollCheck, 3000);
-</script>
+<script src="/static/dashboard.js"></script>
 {% endif %}
 {% endblock %}

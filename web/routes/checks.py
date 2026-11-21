@@ -1,6 +1,5 @@
 """Check trigger and status routes."""
 
-import os
 import threading
 
 from fastapi import APIRouter, Request

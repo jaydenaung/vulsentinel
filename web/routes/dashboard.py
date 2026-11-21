@@ -1,17 +1,14 @@
 """Main dashboard route."""
 
-import os
-
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
 
 from web.auth import get_session_user
 from web.db import get_db
 from web.scanner import check_state
+from web.templating import templates
 
 router = APIRouter()
-templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "..", "templates"))
 
 
 @router.get("/dashboard", response_class=HTMLResponse)

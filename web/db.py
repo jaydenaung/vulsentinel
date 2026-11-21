@@ -4,8 +4,8 @@
 
 import os
 import sqlite3
+from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Generator
 
 DB_PATH = os.environ.get("CVE_DB_PATH", "cve_triage.db")
 
