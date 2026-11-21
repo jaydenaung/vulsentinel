@@ -5,6 +5,7 @@ __pycache__/
 dist/
 build/
 .venv/
+.venv*/
 venv/
 env/
 .env
@@ -21,3 +22,13 @@ reports/
 .DS_Store
 Thumbs.db
 reports/
+
+# Local working memory (episodic / semantic / procedural)
+memory/
+
+# Local SQLite data (contains users / PII). Never commit.
+*.db
+*.db-wal
+*.db-shm
+*.db.bak
+*.db.*.bak
