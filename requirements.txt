@@ -27,6 +27,10 @@ docstring-parser==0.18.0
     # via anthropic
 fastapi==0.141.1
     # via vulsentinel
+feedparser==6.0.14
+    # via vulsentinel
+feedparser-sgmllib==2.1.0
+    # via feedparser
 h11==0.16.0
     # via
     #   httpcore2

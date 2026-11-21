@@ -88,6 +88,33 @@ def init_db() -> None:
                 ('max_cves_per_product', '50'),
                 ('nvd_rate_limit_delay', '6.5'),
                 ('env_context', '');
+
+            CREATE TABLE IF NOT EXISTS feeds (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                url TEXT NOT NULL UNIQUE,
+                enabled INTEGER NOT NULL DEFAULT 1,
+                last_fetched_at TEXT,
+                last_status TEXT,
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+
+            CREATE TABLE IF NOT EXISTS articles (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                feed_id INTEGER NOT NULL REFERENCES feeds(id) ON DELETE CASCADE,
+                guid TEXT NOT NULL,
+                url TEXT,
+                title TEXT NOT NULL,
+                summary TEXT NOT NULL DEFAULT '',
+                published_at TEXT,
+                cve_ids TEXT NOT NULL DEFAULT '[]',
+                fetched_at TEXT NOT NULL DEFAULT (datetime('now')),
+                UNIQUE(feed_id, guid)
+            );
+            CREATE INDEX IF NOT EXISTS idx_articles_published ON articles(published_at DESC);
+
+            INSERT OR IGNORE INTO feeds (name, url) VALUES
+                ('Wiz Research', 'https://www.wiz.io/feed/rss.xml');
         """)
     _migrate_db()
 

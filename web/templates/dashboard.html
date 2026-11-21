@@ -57,6 +57,49 @@
   </div>
 </div>
 
+<!-- Research & news -->
+<div class="card mb-4" id="newsWidget">
+  <div class="card-header fw-semibold d-flex justify-content-between align-items-center">
+    <span><i class="bi bi-newspaper text-primary"></i> Research &amp; News</span>
+    <span class="small text-muted">{{ articles|length }} latest</span>
+  </div>
+  <div class="card-body p-0">
+    {% if articles %}
+    <ul class="list-group list-group-flush small">
+      {% for a in articles %}
+      <li class="list-group-item">
+        <div class="d-flex justify-content-between gap-2">
+          {% if a.url %}
+          <a href="{{ a.url }}" target="_blank" rel="noopener noreferrer" class="fw-semibold text-decoration-none">{{ a.title }}</a>
+          {% else %}
+          <span class="fw-semibold">{{ a.title }}</span>
+          {% endif %}
+          <span class="text-muted text-nowrap">{{ (a.published_at or a.fetched_at)[:10] }}</span>
+        </div>
+        <div class="text-muted">{{ a.feed_name }}{% if a.summary %} &middot; {{ a.summary[:180] }}{% if a.summary|length > 180 %}...{% endif %}{% endif %}</div>
+        {% if a.cves %}
+        <div class="mt-1 d-flex flex-wrap gap-1">
+          {% for c in a.cves %}
+          {% if c.watched %}
+          <a href="/cves?search={{ c.id }}" class="badge bg-danger text-decoration-none" title="On your watchlist">{{ c.id }}</a>
+          {% else %}
+          <a href="https://nvd.nist.gov/vuln/detail/{{ c.id }}" target="_blank" rel="noopener noreferrer" class="badge bg-secondary text-decoration-none">{{ c.id }}</a>
+          {% endif %}
+          {% endfor %}
+        </div>
+        {% endif %}
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <div class="text-center text-muted py-4 small">
+      <i class="bi bi-newspaper fs-3"></i>
+      <p class="mt-2 mb-0">No articles yet. Run <code>uv run python agent.py --news-sweep</code>.</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
 <div class="row g-3 mb-4">
   <!-- CVEs by product -->
   <div class="col-md-7">

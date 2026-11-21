@@ -16,6 +16,7 @@ dependencies = [
     "bcrypt==5.0.0",
     "itsdangerous==2.2.0",
     "apscheduler==3.11.3",
+    "feedparser==6.0.14",
 ]
 
 [dependency-groups]

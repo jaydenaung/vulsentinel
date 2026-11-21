@@ -69,11 +69,32 @@ def parse_args() -> argparse.Namespace:
         help="Path to config file (default: config.yaml).",
     )
     parser.add_argument(
+        "--news-sweep",
+        action="store_true",
+        help="Fetch enabled research/news feeds and store new articles, then exit.",
+    )
+    parser.add_argument(
         "--reset-password",
         metavar="USERNAME",
         help="Set a new password for a web user (prompts, input hidden).",
     )
     return parser.parse_args()
+
+
+def news_sweep() -> int:
+    """Run one news sweep and print a per-feed summary. Exit 1 if every feed failed."""
+    import logging
+
+    from web.db import init_db
+    from web.news_sweep import run_news_sweep
+
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s  %(message)s")
+    init_db()
+    results = run_news_sweep()
+    for r in results:
+        status = f"{r['parsed']} parsed, {r['new']} new" if r["ok"] else f"FAILED ({r['error']})"
+        print(f"  {r['feed']}: {status}")
+    return 0 if any(r["ok"] for r in results) or not results else 1
 
 
 def reset_password(username: str, prompt=getpass.getpass) -> int:
@@ -109,6 +130,9 @@ def main() -> int:
 
     if args.reset_password:
         return reset_password(args.reset_password.strip())
+
+    if args.news_sweep:
+        return news_sweep()
 
     # ── Web server mode ──────────────────────────────────────────────────────
     if args.serve:

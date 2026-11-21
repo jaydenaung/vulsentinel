@@ -204,3 +204,20 @@ def test_add_product_db_error_is_generic(client: TestClient, monkeypatch: pytest
         conn.execute("DROP TABLE products")
     resp = client.post("/products/add", data={"name": "Nginx", "keyword": "nginx", "csrf_token": tok})
     assert resp.headers["location"] == "/products?error=Could+not+add+product"
+
+
+def test_news_widget_escapes_feed_text_and_isolates_links(client: TestClient) -> None:
+    setup_admin(client)
+    login(client)
+    with db_mod.get_db() as conn:
+        feed_id = conn.execute("SELECT id FROM feeds").fetchone()[0]
+        conn.execute(
+            "INSERT INTO articles (feed_id, guid, url, title, summary, cve_ids) VALUES (?, 'g1', ?, ?, ?, ?)",
+            (feed_id, "https://research.example.com/p", "<script>alert(1)</script> PHP2Shell",
+             "<img src=x onerror=alert(2)>", '["CVE-2026-109618"]'),
+        )
+    html = client.get("/dashboard").text
+    assert "<script>alert(1)</script>" not in html and "&lt;script&gt;" in html
+    assert "<img src=x" not in html
+    assert 'href="https://research.example.com/p" target="_blank" rel="noopener noreferrer"' in html
+    assert "CVE-2026-109618" in html

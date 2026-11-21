@@ -5,6 +5,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 
 from web.auth import get_session_user
 from web.db import get_db
+from web.news_sweep import latest_articles
 from web.scanner import check_state
 from web.templating import templates
 
@@ -65,4 +66,5 @@ def dashboard(request: Request):
         "recent_critical": [dict(r) for r in recent_critical],
         "last_check": dict(last_check) if last_check else None,
         "check_running": check_state["is_running"],
+        "articles": latest_articles(10),
     })
