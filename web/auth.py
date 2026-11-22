@@ -45,13 +45,20 @@ def password_problem(password: str) -> str | None:
     return None
 
 
-def create_session(user_id: int) -> str:
-    return _serializer().dumps(user_id)
+def create_session(user_id: int, session_version: int) -> str:
+    """Signed [user_id, version]. Bumping the user's version revokes every older cookie."""
+    return _serializer().dumps([user_id, session_version])
 
 
-def set_session_cookie(request: Request, response: Response, user_id: int) -> None:
+def revoke_sessions(user_id: int) -> None:
+    """Invalidate all of a user's sessions (password change, logout everywhere)."""
+    with get_db() as conn:
+        conn.execute("UPDATE users SET session_version = session_version + 1 WHERE id = ?", (user_id,))
+
+
+def set_session_cookie(request: Request, response: Response, user_id: int, session_version: int) -> None:
     response.set_cookie(
-        SESSION_COOKIE, create_session(user_id),
+        SESSION_COOKIE, create_session(user_id, session_version),
         max_age=get_settings().session_max_age_seconds,
         httponly=True, samesite="lax", secure=cookie_is_secure(request), path="/",
     )
@@ -67,16 +74,22 @@ def get_session_user(request: Request) -> dict | None:
     if not token:
         return None
     try:
-        user_id = _serializer().loads(token, max_age=get_settings().session_max_age_seconds)
+        payload = _serializer().loads(token, max_age=get_settings().session_max_age_seconds)
     except (BadSignature, SignatureExpired):
         return None
-    if not isinstance(user_id, int):
+    # Old cookies held a bare user id; they no longer validate, so users log in once more.
+    if not (isinstance(payload, list) and len(payload) == 2 and all(type(x) is int for x in payload)):
         return None
+    user_id, version = payload
     with get_db() as conn:
         row = conn.execute(
-            "SELECT id, username, email, role, created_at FROM users WHERE id = ?", (user_id,)
+            "SELECT id, username, email, role, created_at, session_version FROM users WHERE id = ?", (user_id,)
         ).fetchone()
-    return dict(row) if row else None
+    if not row or row["session_version"] != version:
+        return None
+    user = dict(row)
+    user.pop("session_version")
+    return user
 
 
 def authenticate_user(username: str, password: str) -> dict | None:

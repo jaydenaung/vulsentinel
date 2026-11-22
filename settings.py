@@ -65,6 +65,9 @@ class Settings(BaseModel):
     secret_key: SecretStr | None = None
     cookie_secure: Literal["auto", "true", "false"] = "auto"
     session_max_age_seconds: int = 86400 * 7
+    login_window_seconds: float = Field(default=900.0, ge=60)  # 15 minutes
+    login_max_failures_per_user_ip: int = Field(default=5, ge=1)
+    login_max_failures_per_ip: int = Field(default=20, ge=1)
 
 
 # USD per million tokens (input, output). Used only for the token meter estimate.

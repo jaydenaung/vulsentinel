@@ -101,7 +101,7 @@ async def reset_password(target_id: int, request: Request, new_password: str = F
 
     with get_db() as conn:
         conn.execute(
-            "UPDATE users SET password_hash = ? WHERE id = ?",
+            "UPDATE users SET password_hash = ?, session_version = session_version + 1 WHERE id = ?",
             (hash_password(new_password), target_id),
         )
     return _flash("msg", "Password updated")

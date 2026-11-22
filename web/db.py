@@ -175,6 +175,7 @@ def init_db() -> None:
 # Names and types are literals from this module, never user input.
 _ADD_COLUMNS: dict[str, list[tuple[str, str]]] = {
     "cves": [("decided_by", "TEXT"), ("input_hash", "TEXT")],
+    "users": [("session_version", "INTEGER NOT NULL DEFAULT 0")],
     "check_runs": [
         ("ai_calls", "INTEGER DEFAULT 0"),
         ("ai_input_tokens", "INTEGER DEFAULT 0"),

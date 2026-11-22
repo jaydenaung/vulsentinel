@@ -147,8 +147,11 @@ def reset_password(username: str, prompt=getpass.getpass) -> int:
         return 1
 
     with get_db() as conn:
-        conn.execute("UPDATE users SET password_hash = ? WHERE username = ?", (hash_password(password), username))
-    print(f"Password updated for {username}.")
+        conn.execute(
+            "UPDATE users SET password_hash = ?, session_version = session_version + 1 WHERE username = ?",
+            (hash_password(password), username),
+        )
+    print(f"Password updated for {username}. Their existing sessions are signed out.")
     return 0
 
 
