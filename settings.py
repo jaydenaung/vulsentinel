@@ -32,6 +32,21 @@ class Settings(BaseModel):
     ai_batch_size: int = Field(default=10, ge=1, le=25)  # gray-zone CVEs per Claude request
     epss_bulk_size: int = Field(default=100, ge=1, le=100)  # CVEs per EPSS API request
 
+    # Daily critical feed (no AI). A CVE is critical if ANY rule matches.
+    critical_cvss_min: float = Field(default=9.0, ge=0, le=10)
+    critical_epss_min: float = Field(default=0.5, ge=0, le=1)  # newly crossing this counts
+    daily_lookback_days: int = Field(default=2, ge=1, le=30)  # overlap so late records are not missed
+    daily_max_lookups: int = Field(default=500, ge=1, le=2000)  # cve.org lookups per run (known ones skipped)
+    cve_org_api: str = "https://cveawg.mitre.org/api/cve/"
+    cve_org_delay_seconds: float = Field(default=0.2, ge=0, le=5)
+
+    # Risk score weights (0-100). Shown to the user as a breakdown, so keep them simple.
+    risk_cvss_weight: float = 3.0  # x CVSS, max 30
+    risk_kev_points: int = 35
+    risk_ransomware_points: int = 10
+    risk_epss_weight: float = 15.0  # x EPSS, max 15
+    risk_watchlist_points: int = 10
+
     # Enrichment sources
     cisa_kev_url: str = "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
     epss_api_url: str = "https://api.first.org/data/v1/epss"

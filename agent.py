@@ -10,6 +10,7 @@ Usage:
     python agent.py --days 14        # check last 14 days
     python agent.py --dry-run        # fetch + rules only, skip Claude
     python agent.py --serve          # start the web dashboard server
+    python agent.py --daily          # collect today's critical CVEs (no AI)
     python agent.py --serve --port 9000 --host 127.0.0.1
     python agent.py --reset-password admin   # prompts for a new password (hidden input)
 """
@@ -75,6 +76,11 @@ def parse_args() -> argparse.Namespace:
         help="Fetch enabled research/news feeds and store new articles, then exit.",
     )
     parser.add_argument(
+        "--daily",
+        action="store_true",
+        help="Collect today's critical CVEs (CVSS 9+, new KEV, EPSS crossers) into the web DB, then exit.",
+    )
+    parser.add_argument(
         "--reset-password",
         metavar="USERNAME",
         help="Set a new password for a web user (prompts, input hidden).",
@@ -96,6 +102,27 @@ def news_sweep() -> int:
         status = f"{r['parsed']} parsed, {r['new']} new" if r["ok"] else f"FAILED ({r['error']})"
         print(f"  {r['feed']}: {status}")
     return 0 if any(r["ok"] for r in results) or not results else 1
+
+
+def daily(days: int | None) -> int:
+    """Run one daily critical collection and print the counts. No AI."""
+    import logging
+
+    from web.daily import run_daily
+    from web.db import get_db, init_db
+
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s  %(message)s")
+    init_db()
+    run_id = run_daily(triggered_by="cli", days=days)
+    if run_id is None:
+        print("A daily run is already in progress.", file=sys.stderr)
+        return 1
+    with get_db() as conn:
+        run = dict(conn.execute("SELECT * FROM daily_runs WHERE id = ?", (run_id,)).fetchone())
+    print(f"Daily run {run_id}: {run['status']}")
+    for key in ("nvd_fetched", "critical_new", "critical_updated", "kev_new", "epss_crossers", "watchlist_hits"):
+        print(f"  {key:17} {run[key]}")
+    return 0 if run["status"] == "completed" else 1
 
 
 def reset_password(username: str, prompt=getpass.getpass) -> int:
@@ -134,6 +161,9 @@ def main() -> int:
 
     if args.news_sweep:
         return news_sweep()
+
+    if args.daily:
+        return daily(args.days)
 
     # ── Web server mode ──────────────────────────────────────────────────────
     if args.serve:

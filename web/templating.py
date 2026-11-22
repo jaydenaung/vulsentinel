@@ -16,6 +16,7 @@ TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), "templates")
 # so a crafted link cannot put attacker text into a trusted-looking banner.
 FLASH_MESSAGES = frozenset({
     "Check started", "Check already in progress",
+    "Daily run started", "Daily run already in progress",
     "Updated successfully", "Invalid status",
     "Product added successfully", "Product deleted", "Name and keyword are required",
     "Could not add product", "Invalid product details",

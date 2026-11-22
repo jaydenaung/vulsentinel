@@ -183,3 +183,33 @@ def format_cve_summary(cve: dict[str, Any], product: str) -> dict[str, Any]:
         "description": extract_description(cve),
         "nvd_url": f"https://nvd.nist.gov/vuln/detail/{cve_id}",
     }
+
+
+def fetch_published(days: int, rate_limit_delay: float = 6.5) -> list[dict[str, Any]]:
+    """Every CVE published in the last N days (no keyword), Rejected ones dropped.
+
+    About 340 CVEs a day, so a 2-day window is one page.
+    """
+    if not 1 <= days <= 30:
+        raise ValueError("days must be 1-30")
+    cfg = get_settings()
+    delay = _effective_delay(rate_limit_delay)
+    results: dict[str, dict[str, Any]] = {}
+    with requests.Session() as session:
+        for start, end in _windows(days, datetime.now(tz=UTC)):
+            index = 0
+            while True:
+                params = {"pubStartDate": _fmt(start), "pubEndDate": _fmt(end),
+                          "resultsPerPage": cfg.nvd_page_size, "startIndex": index}
+                data = _nvd_request(session, params, delay)
+                page = [v["cve"] for v in data["vulnerabilities"]
+                        if isinstance(v, dict) and isinstance(v.get("cve"), dict)]
+                for cve in page:
+                    cve_id = str(cve.get("id", ""))
+                    if CVE_ID_RE.match(cve_id) and cve.get("vulnStatus") != "Rejected":
+                        results[cve_id] = cve
+                index += len(page)
+                if not page or index >= int(data.get("totalResults", 0) or 0):
+                    break
+    log.info("NVD: %d CVE(s) published in the last %d day(s)", len(results), days)
+    return list(results.values())

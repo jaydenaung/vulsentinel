@@ -28,7 +28,8 @@ class Evidence(BaseModel):
     epss_percentile: float | None = Field(default=None, ge=0, le=1)
 
 
-def _kev_catalog() -> dict[str, Any]:
+def kev_catalog() -> dict[str, Any]:
+    """cveID -> KEV entry. Cached for kev_cache_ttl_seconds."""
     global _kev_cache, _kev_fetched_at
     cfg = get_settings()
     now = time.monotonic()
@@ -64,7 +65,7 @@ def enrich(cve_ids: list[str]) -> dict[str, Evidence]:
         return evidence
 
     try:
-        catalog = _kev_catalog()
+        catalog = kev_catalog()
         for c in ids:
             entry = catalog.get(c)
             evidence[c].in_kev = entry is not None
@@ -82,3 +83,20 @@ def enrich(cve_ids: list[str]) -> dict[str, Evidence]:
         log.warning("EPSS bulk lookup failed: %s", type(exc).__name__)
 
     return evidence
+
+
+def epss_above(threshold: float) -> dict[str, float]:
+    """Every CVE whose EPSS is above threshold, in one request (about 4,400 at 0.5)."""
+    cfg = get_settings()
+    resp = requests.get(cfg.epss_api_url, params={"epss-gt": str(threshold), "limit": 20000},
+                        timeout=max(cfg.http_timeout_seconds, 60))
+    resp.raise_for_status()
+    scores: dict[str, float] = {}
+    for item in resp.json().get("data", []):
+        try:
+            cve_id = str(item["cve"]).upper()
+            if CVE_ID_RE.match(cve_id):
+                scores[cve_id] = float(item["epss"])
+        except (KeyError, TypeError, ValueError):
+            continue
+    return scores

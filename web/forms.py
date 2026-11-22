@@ -5,7 +5,7 @@
 import re
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 Action = Literal["PATCH NOW", "MONITOR", "LOW PRIORITY"]
 Status = Literal["open", "accepted", "in_remediation", "mitigated"]
@@ -84,3 +84,18 @@ class CveFilters(_Form):
                 continue
             clean[key] = value
         return cls.model_validate(clean)
+
+
+class CriticalFilters(BaseModel):
+    """Query filters for the daily critical feed. Anything invalid falls back to defaults."""
+    days: Literal[1, 7, 30] = 7
+    reason: Literal["cvss", "kev", "epss"] | None = None
+    watched: bool = False
+
+    @classmethod
+    def from_query(cls, params: dict[str, str]) -> "CriticalFilters":
+        try:
+            return cls(days=int(params.get("days", "7")), reason=params.get("reason") or None,
+                       watched=params.get("watched") == "1")
+        except (ValueError, ValidationError):
+            return cls()

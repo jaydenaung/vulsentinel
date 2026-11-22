@@ -14,14 +14,24 @@ from fastapi.staticfiles import StaticFiles
 
 from settings import require_secret_key
 from web.db import init_db, user_count
-from web.routes import auth_routes, checks, cves, dashboard, products, settings, setup_routes, users
+from web.routes import (
+    auth_routes,
+    checks,
+    critical,
+    cves,
+    dashboard,
+    products,
+    settings,
+    setup_routes,
+    users,
+)
 from web.scheduler import start_scheduler, stop_scheduler
 from web.security import apply_security, csrf_protect
 
 log = logging.getLogger(__name__)
 
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
-ROUTERS = [setup_routes, auth_routes, dashboard, products, cves, users, checks, settings]
+ROUTERS = [setup_routes, auth_routes, dashboard, critical, products, cves, users, checks, settings]
 
 
 @asynccontextmanager

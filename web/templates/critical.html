@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% block title %}Critical Feed — VulSentinel{% endblock %}
+{% block page_title %}<i class="bi bi-radioactive"></i> Critical Feed{% endblock %}
+
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+  <div class="small text-muted">
+    Critical = CVSS 9+, newly added to CISA KEV, or EPSS newly above 0.5. Decided by rules, no AI.
+    {% if last_run %}
+    <br>Last run: {{ last_run.started_at[:16] }} UTC,
+    {{ last_run.status }}{% if last_run.status == 'completed' %}:
+    {{ last_run.nvd_fetched }} NVD CVEs scanned, {{ last_run.critical_new }} new criticals,
+    {{ last_run.kev_new }} KEV additions, {{ last_run.epss_crossers }} EPSS crossers,
+    {{ last_run.watchlist_hits }} watchlist hits{% endif %}
+    {% endif %}
+  </div>
+  {% if user.role == 'admin' %}
+  <form method="post" action="/critical/run">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button type="submit" class="btn btn-sm btn-danger" {{ 'disabled' if running }}>
+      <i class="bi bi-play-fill"></i> {{ 'Running…' if running else 'Run daily collection' }}
+    </button>
+  </form>
+  {% endif %}
+</div>
+
+<div class="card mb-3">
+  <div class="card-body py-2">
+    <form method="get" action="/critical" class="row g-2 align-items-end">
+      <div class="col-auto">
+        <label class="form-label small fw-semibold mb-1">First seen</label>
+        <select name="days" class="form-select form-select-sm">
+          {% for d, label in [(1, 'Last 24 hours'), (7, 'Last 7 days'), (30, 'Last 30 days')] %}
+          <option value="{{ d }}" {{ 'selected' if filters.days == d }}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-auto">
+        <label class="form-label small fw-semibold mb-1">Reason</label>
+        <select name="reason" class="form-select form-select-sm">
+          <option value="">Any</option>
+          {% for key, label in reason_labels.items() if key != 'news' %}
+          <option value="{{ key }}" {{ 'selected' if filters.reason == key }}>{{ label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-auto form-check ms-2 mb-1">
+        <input class="form-check-input" type="checkbox" name="watched" value="1" id="watched" {{ 'checked' if filters.watched }}>
+        <label class="form-check-label small" for="watched">My products only</label>
+      </div>
+      <div class="col-auto d-flex gap-2">
+        <button type="submit" class="btn btn-sm btn-primary">Filter</button>
+        <a href="/critical" class="btn btn-sm btn-outline-secondary">Clear</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-header fw-semibold small">
+    {{ total }} critical CVE(s){% if total > vulns | length %}<span class="text-muted fw-normal">, showing the top {{ vulns | length }} by risk</span>{% endif %}
+  </div>
+  <div class="card-body p-0">
+    {% if vulns %}
+    <div class="table-responsive">
+    <table class="table table-sm table-hover align-middle mb-0 small">
+      <thead class="table-light">
+        <tr>
+          <th title="0-100, deterministic. Hover a score for its breakdown.">Risk</th>
+          <th>CVE</th>
+          <th>Vendor / product</th>
+          <th>CVSS</th>
+          <th>EPSS</th>
+          <th>KEV</th>
+          <th>Why critical</th>
+          <th>First seen</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for v in vulns %}
+        <tr>
+          <td>
+            <span class="badge {{ 'bg-danger' if v.risk_score >= 60 else ('bg-warning text-dark' if v.risk_score >= 40 else 'bg-secondary') }}"
+                  title="{% for k, pts in v.breakdown.items() %}{{ k }} +{{ pts }}{{ ', ' if not loop.last }}{% endfor %}">
+              {{ v.risk_score }}
+            </span>
+          </td>
+          <td class="text-nowrap">
+            <a href="https://nvd.nist.gov/vuln/detail/{{ v.cve_id }}" target="_blank" rel="noopener noreferrer">{{ v.cve_id }}</a>
+            {% if v.watched_products %}
+            <br><span class="badge bg-primary" title="Matches your watchlist"><i class="bi bi-eye-fill"></i> {{ v.watched_products }}</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if v.affected %}{{ v.affected[0][0] }} / {{ v.affected[0][1] }}{% if v.affected | length > 1 %} <span class="text-muted">+{{ v.affected | length - 1 }}</span>{% endif %}
+            {% else %}<span class="text-muted">unknown</span>{% endif %}
+            <div class="text-muted text-truncate" style="max-width: 32rem" title="{{ v.description }}">{{ v.description }}</div>
+          </td>
+          <td>{{ "%.1f" | format(v.cvss_score) if v.cvss_score is not none else '—' }}</td>
+          <td>{{ "%.3f" | format(v.epss_score) if v.epss_score is not none else '—' }}</td>
+          <td class="text-nowrap">
+            {% if v.in_kev %}
+            <span class="badge bg-danger" title="Added {{ v.kev_date_added }}">KEV</span>
+            {% if v.kev_ransomware %}<span class="badge bg-dark" title="Known ransomware use">Ransomware</span>{% endif %}
+            {% else %}<span class="text-muted">—</span>{% endif %}
+          </td>
+          <td>{% for r in v.reasons %}<span class="badge bg-light text-dark border me-1">{{ reason_labels.get(r, r) }}</span>{% endfor %}</td>
+          <td class="text-nowrap text-muted">{{ v.first_seen[:16] }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+    <div class="text-center text-muted py-5">
+      <i class="bi bi-shield-check fs-2"></i>
+      <p class="mt-2 mb-0">No criticals in this window yet.{% if user.role == 'admin' %} Run the daily collection to fetch them.{% endif %}</p>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

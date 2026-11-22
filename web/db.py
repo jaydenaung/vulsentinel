@@ -87,7 +87,8 @@ def init_db() -> None:
                 ('check_days_lookback', '7'),
                 ('max_cves_per_product', '50'),
                 ('nvd_rate_limit_delay', '6.5'),
-                ('env_context', '');
+                ('env_context', ''),
+                ('daily_run_hour_utc', '6');
 
             CREATE TABLE IF NOT EXISTS feeds (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -115,6 +116,57 @@ def init_db() -> None:
 
             INSERT OR IGNORE INTO feeds (name, url) VALUES
                 ('Wiz Research', 'https://www.wiz.io/feed/rss.xml');
+
+            -- Daily critical feed: one row per CVE, any product.
+            CREATE TABLE IF NOT EXISTS vulns (
+                cve_id TEXT PRIMARY KEY,
+                published TEXT,
+                cvss_score REAL,
+                severity TEXT NOT NULL DEFAULT 'none',
+                description TEXT NOT NULL DEFAULT '',
+                affected TEXT NOT NULL DEFAULT '[]',
+                in_kev INTEGER NOT NULL DEFAULT 0,
+                kev_date_added TEXT,
+                kev_ransomware INTEGER NOT NULL DEFAULT 0,
+                epss_score REAL,
+                critical_reasons TEXT NOT NULL DEFAULT '[]',
+                risk_score INTEGER NOT NULL DEFAULT 0,
+                risk_breakdown TEXT NOT NULL DEFAULT '{}',
+                status TEXT NOT NULL DEFAULT 'new',
+                notes TEXT NOT NULL DEFAULT '',
+                first_seen TEXT NOT NULL DEFAULT (datetime('now')),
+                last_updated TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+            CREATE INDEX IF NOT EXISTS idx_vulns_first_seen ON vulns(first_seen DESC);
+
+            CREATE TABLE IF NOT EXISTS vuln_products (
+                cve_id TEXT NOT NULL REFERENCES vulns(cve_id) ON DELETE CASCADE,
+                product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+                match_type TEXT NOT NULL,
+                PRIMARY KEY (cve_id, product_id)
+            );
+
+            -- CVEs already above the EPSS threshold, so only new crossers are flagged.
+            CREATE TABLE IF NOT EXISTS epss_baseline (
+                cve_id TEXT PRIMARY KEY,
+                epss_score REAL NOT NULL,
+                first_seen TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+
+            CREATE TABLE IF NOT EXISTS daily_runs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                triggered_by TEXT,
+                started_at TEXT NOT NULL DEFAULT (datetime('now')),
+                finished_at TEXT,
+                status TEXT NOT NULL DEFAULT 'running',
+                nvd_fetched INTEGER NOT NULL DEFAULT 0,
+                critical_new INTEGER NOT NULL DEFAULT 0,
+                critical_updated INTEGER NOT NULL DEFAULT 0,
+                kev_new INTEGER NOT NULL DEFAULT 0,
+                epss_crossers INTEGER NOT NULL DEFAULT 0,
+                watchlist_hits INTEGER NOT NULL DEFAULT 0,
+                error TEXT
+            );
         """)
     _migrate_db()
 
